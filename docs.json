@@ -7,11 +7,7 @@
     "primary": "#FF5A36",
     "light": "#FF8A6B",
     "dark": "#FF5A36"
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
+  }, 
   "navbar": {
     "primary": {
       "type": "github",
