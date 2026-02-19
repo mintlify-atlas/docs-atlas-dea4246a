@@ -1,0 +1,178 @@
+{
+  "projectType": "framework",
+  "projectName": "OpenClaw",
+  "projectDescription": "Self-hosted AI assistant gateway for WhatsApp, Telegram, Discord, iMessage, and more messaging platforms",
+  "theme": "mint",
+  "primaryColor": "#FF5A36",
+  "lightColor": "#FF8A6B",
+  "darkColor": "#FF5A36",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/gateway",
+              "concepts/agents",
+              "concepts/channels",
+              "concepts/sessions",
+              "concepts/routing"
+            ]
+          },
+          {
+            "group": "Channels",
+            "pages": [
+              "channels/overview",
+              "channels/whatsapp",
+              "channels/telegram",
+              "channels/discord",
+              "channels/slack",
+              "channels/imessage",
+              "channels/signal",
+              "channels/pairing"
+            ]
+          },
+          {
+            "group": "Platform Apps",
+            "pages": [
+              "platforms/macos",
+              "platforms/ios",
+              "platforms/android",
+              "platforms/web"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/deployment",
+              "guides/docker",
+              "guides/security",
+              "guides/multi-agent",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/overview",
+              "cli/gateway",
+              "cli/agent",
+              "cli/channels",
+              "cli/config",
+              "cli/onboard"
+            ]
+          },
+          {
+            "group": "Management",
+            "pages": [
+              "cli/daemon",
+              "cli/logs",
+              "cli/update",
+              "cli/doctor"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Plugin Development",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "plugins/introduction",
+              "plugins/architecture",
+              "plugins/getting-started"
+            ]
+          },
+          {
+            "group": "SDK Reference",
+            "pages": [
+              "plugins/plugin-sdk",
+              "plugins/hooks",
+              "plugins/tools",
+              "plugins/channels"
+            ]
+          },
+          {
+            "group": "Extensions",
+            "pages": [
+              "plugins/built-in-extensions",
+              "plugins/publishing",
+              "plugins/examples"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Gateway API",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/websocket",
+              "api/rest-endpoints"
+            ]
+          },
+          {
+            "group": "Agent Communication",
+            "pages": [
+              "api/agent-protocol",
+              "api/messages",
+              "api/sessions",
+              "api/events"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-channel messaging gateway",
+    "Self-hosted AI assistant platform",
+    "WhatsApp, Telegram, Discord, iMessage integration",
+    "Plugin and extension system",
+    "Cross-platform CLI tool",
+    "Mobile apps for iOS and Android",
+    "macOS menubar app",
+    "Web-based control UI",
+    "Multi-agent routing and sessions",
+    "Docker and cloud deployment support"
+  ],
+  "publicApiSurface": [
+    "openclaw gateway",
+    "openclaw agent",
+    "openclaw channels login",
+    "openclaw channels status",
+    "openclaw config set",
+    "openclaw config get",
+    "openclaw onboard",
+    "openclaw daemon install",
+    "openclaw daemon start",
+    "openclaw daemon stop",
+    "openclaw update",
+    "openclaw doctor",
+    "Gateway WebSocket API",
+    "Gateway REST API",
+    "Plugin SDK exports",
+    "Channel integrations"
+  ]
+}
