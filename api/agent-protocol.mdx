@@ -1,0 +1,456 @@
+---
+title: "Agent Protocol"
+description: "Agent communication protocol, RPC calls, and tool invocation"
+---
+
+# Agent Protocol
+
+The Agent Protocol defines how to invoke agents, stream responses, and handle tool invocations via the OpenClaw Gateway API.
+
+## Invoke Agent
+
+Send a message to an agent and receive a response.
+
+### Method: `agent`
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "agent",
+  "params": {
+    "message": "What is the weather in San Francisco?",
+    "sessionKey": "user:alice",
+    "runId": "run-123",
+    "agentId": "default",
+    "model": "gpt-4",
+    "thinking": "medium",
+    "deliver": false
+  }
+}
+```
+
+<ParamField path="message" type="string" required>
+  User message to send to the agent
+</ParamField>
+
+<ParamField path="sessionKey" type="string" required>
+  Session key for conversation context (e.g., `"user:alice"`, `"signal:+1234567890"`)
+</ParamField>
+
+<ParamField path="runId" type="string">
+  Optional unique run identifier for tracking. Auto-generated if not provided.
+</ParamField>
+
+<ParamField path="agentId" type="string">
+  Target agent ID. Defaults to configured default agent.
+</ParamField>
+
+<ParamField path="model" type="string">
+  Override model for this request (e.g., `"gpt-4"`, `"claude-opus-4"`)
+</ParamField>
+
+<ParamField path="thinking" type="string">
+  Thinking budget: `"low"`, `"medium"`, `"high"`, `"extended"`
+</ParamField>
+
+<ParamField path="deliver" type="boolean" default={false}>
+  Whether to deliver the response via configured channel
+</ParamField>
+
+<ParamField path="messageChannel" type="string">
+  Channel for delivery (e.g., `"signal"`, `"telegram"`, `"discord"`)
+</ParamField>
+
+<ParamField path="to" type="string">
+  Recipient identifier (phone, user ID, etc.)
+</ParamField>
+
+<ParamField path="extraSystemPrompt" type="string">
+  Additional system prompt to prepend
+</ParamField>
+
+<ParamField path="timeoutSeconds" type="number">
+  Request timeout in seconds
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 10,
+  "ok": true,
+  "payload": {
+    "runId": "run-123",
+    "payloads": [
+      {
+        "type": "text",
+        "text": "The current weather in San Francisco is..."
+      }
+    ]
+  }
+}
+```
+
+<ResponseField name="runId" type="string">
+  Unique run identifier
+</ResponseField>
+
+<ResponseField name="payloads" type="array">
+  Array of response payloads (text, images, etc.)
+</ResponseField>
+
+## Streaming Responses
+
+Agent responses are streamed in real-time via WebSocket events.
+
+### Event: `agent`
+
+Receive agent response chunks during execution.
+
+```json
+{
+  "event": "agent",
+  "payload": {
+    "runId": "run-123",
+    "stream": "assistant",
+    "data": {
+      "type": "text",
+      "text": "The"
+    }
+  }
+}
+```
+
+<ResponseField name="runId" type="string">
+  Run identifier matching the request
+</ResponseField>
+
+<ResponseField name="stream" type="string">
+  Stream type: `"assistant"`, `"tool"`, `"lifecycle"`
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Stream-specific data
+</ResponseField>
+
+### Stream Types
+
+**`assistant` - Text response chunks:**
+
+```json
+{
+  "stream": "assistant",
+  "data": {
+    "type": "text",
+    "text": "chunk"
+  }
+}
+```
+
+**`tool` - Tool invocations:**
+
+```json
+{
+  "stream": "tool",
+  "data": {
+    "phase": "start",
+    "name": "web_search",
+    "toolCallId": "call-123",
+    "input": {"query": "weather San Francisco"}
+  }
+}
+```
+
+**`lifecycle` - Execution phases:**
+
+```json
+{
+  "stream": "lifecycle",
+  "data": {
+    "phase": "end"
+  }
+}
+```
+
+Phases: `"start"`, `"thinking"`, `"end"`, `"error"`
+
+## Wait for Agent Response
+
+Wait for a specific agent run to complete.
+
+### Method: `agent.wait`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "method": "agent.wait",
+  "params": {
+    "runId": "run-123",
+    "timeoutSeconds": 60
+  }
+}
+```
+
+<ParamField path="runId" type="string" required>
+  Run identifier to wait for
+</ParamField>
+
+<ParamField path="timeoutSeconds" type="number" default={300}>
+  Wait timeout in seconds
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 11,
+  "ok": true,
+  "payload": {
+    "completed": true,
+    "result": {
+      "payloads": [...]
+    }
+  }
+}
+```
+
+## Abort Agent Run
+
+Abort an in-progress agent run.
+
+### Method: `agent.abort`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "method": "chat.abort",
+  "params": {
+    "runId": "run-123"
+  }
+}
+```
+
+<ParamField path="runId" type="string" required>
+  Run identifier to abort
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 12,
+  "ok": true,
+  "payload": {
+    "aborted": true
+  }
+}
+```
+
+## Agent Identity
+
+Get agent metadata and identity information.
+
+### Method: `agent.identity.get`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 13,
+  "method": "agent.identity.get",
+  "params": {
+    "agentId": "default"
+  }
+}
+```
+
+<ParamField path="agentId" type="string">
+  Agent ID. Defaults to default agent.
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 13,
+  "ok": true,
+  "payload": {
+    "id": "default",
+    "name": "OpenClaw",
+    "avatar": "https://...",
+    "description": "Your AI assistant"
+  }
+}
+```
+
+## List Agents
+
+List all configured agents.
+
+### Method: `agents.list`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 14,
+  "method": "agents.list",
+  "params": {}
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": 14,
+  "ok": true,
+  "payload": {
+    "agents": [
+      {
+        "id": "default",
+        "name": "OpenClaw",
+        "model": "gpt-4",
+        "description": "Default agent"
+      },
+      {
+        "id": "coder",
+        "name": "Coder",
+        "model": "claude-opus-4",
+        "description": "Coding specialist"
+      }
+    ]
+  }
+}
+```
+
+## Tool Invocation Events
+
+When the agent invokes tools, you receive real-time events:
+
+**Tool start:**
+
+```json
+{
+  "event": "agent",
+  "payload": {
+    "runId": "run-123",
+    "stream": "tool",
+    "data": {
+      "phase": "start",
+      "name": "web_search",
+      "toolCallId": "call-456",
+      "input": {
+        "query": "OpenClaw documentation"
+      }
+    }
+  }
+}
+```
+
+**Tool result:**
+
+```json
+{
+  "event": "agent",
+  "payload": {
+    "runId": "run-123",
+    "stream": "tool",
+    "data": {
+      "phase": "result",
+      "toolCallId": "call-456",
+      "result": {
+        "content": "Search results..."
+      }
+    }
+  }
+}
+```
+
+**Tool error:**
+
+```json
+{
+  "event": "agent",
+  "payload": {
+    "runId": "run-123",
+    "stream": "tool",
+    "data": {
+      "phase": "error",
+      "toolCallId": "call-456",
+      "error": "Tool execution failed"
+    }
+  }
+}
+```
+
+## Example: Complete Agent Invocation
+
+```javascript
+const ws = new WebSocket('ws://localhost:18789');
+let requestId = 0;
+
+// Track agent responses
+const responses = new Map();
+
+function sendRequest(method, params) {
+  const id = ++requestId;
+  ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+  return id;
+}
+
+ws.on('open', () => {
+  // Authenticate
+  sendRequest('connect', {
+    role: 'control',
+    auth: { token: 'your-token' },
+    client: { name: 'Agent Client', version: '1.0.0' }
+  });
+});
+
+ws.on('message', (data) => {
+  const frame = JSON.parse(data);
+  
+  if (frame.event === 'agent') {
+    // Handle streaming response
+    const { runId, stream, data: eventData } = frame.payload;
+    
+    if (stream === 'assistant') {
+      // Accumulate text
+      if (!responses.has(runId)) responses.set(runId, '');
+      responses.set(runId, responses.get(runId) + eventData.text);
+      process.stdout.write(eventData.text);
+    } else if (stream === 'tool') {
+      console.log('Tool:', eventData.name, eventData.phase);
+    } else if (stream === 'lifecycle' && eventData.phase === 'end') {
+      console.log('\n\nAgent completed');
+    }
+  } else if (frame.id === 1) {
+    // Connected - invoke agent
+    const runId = 'run-' + Date.now();
+    sendRequest('agent', {
+      message: 'What is OpenClaw?',
+      sessionKey: 'example:session',
+      runId,
+      thinking: 'medium'
+    });
+  }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sessions" icon="list" href="/api/sessions">
+    Manage conversation sessions
+  </Card>
+  <Card title="Messages" icon="message" href="/api/messages">
+    Send messages via channels
+  </Card>
+  <Card title="Events" icon="bell" href="/api/events">
+    Subscribe to all event types
+  </Card>
+</CardGroup>

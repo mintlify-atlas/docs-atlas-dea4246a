@@ -1,0 +1,332 @@
+---
+title: "openclaw gateway"
+description: "Run, inspect, and query the WebSocket Gateway"
+---
+
+# openclaw gateway
+
+Manage the OpenClaw WebSocket Gateway server.
+
+## Usage
+
+```bash
+openclaw gateway [command] [options]
+```
+
+## Commands
+
+### run
+
+Run the WebSocket Gateway in the foreground.
+
+```bash
+openclaw gateway run [options]
+```
+
+#### Options
+
+<ParamField path="--port <port>" type="number">
+  Port for the gateway WebSocket server (default: 18789)
+</ParamField>
+
+<ParamField path="--bind <mode>" type="string">
+  Bind mode: `loopback`, `lan`, `tailnet`, `auto`, or `custom`
+  
+  - `loopback`: Bind to 127.0.0.1 (local only)
+  - `lan`: Bind to LAN interface
+  - `tailnet`: Expose via Tailscale
+  - `auto`: Choose automatically
+  - `custom`: Use custom bind address
+  
+  Defaults to config `gateway.bind` or loopback
+</ParamField>
+
+<ParamField path="--token <token>" type="string">
+  Shared token required in connect.params.auth.token. Defaults to OPENCLAW_GATEWAY_TOKEN env if set
+</ParamField>
+
+<ParamField path="--auth <mode>" type="string">
+  Gateway auth mode: `token` or `password`
+</ParamField>
+
+<ParamField path="--password <password>" type="string">
+  Password for auth mode=password
+</ParamField>
+
+<ParamField path="--tailscale <mode>" type="string">
+  Tailscale exposure mode: `off`, `serve`, or `funnel`
+</ParamField>
+
+<ParamField path="--tailscale-reset-on-exit" type="boolean">
+  Reset Tailscale serve/funnel configuration on shutdown
+</ParamField>
+
+<ParamField path="--allow-unconfigured" type="boolean">
+  Allow gateway start without gateway.mode=local in config
+</ParamField>
+
+<ParamField path="--force" type="boolean">
+  Kill any existing listener on the target port before starting
+</ParamField>
+
+<ParamField path="--verbose" type="boolean">
+  Enable verbose logging to stdout/stderr
+</ParamField>
+
+<ParamField path="--ws-log <style>" type="string">
+  WebSocket log style: `auto`, `full`, or `compact` (default: auto)
+</ParamField>
+
+<ParamField path="--compact" type="boolean">
+  Alias for `--ws-log compact`
+</ParamField>
+
+<ParamField path="--dev" type="boolean">
+  Create a dev config + workspace if missing (no BOOTSTRAP.md)
+</ParamField>
+
+<ParamField path="--reset" type="boolean">
+  Reset dev config + credentials + sessions + workspace (requires --dev)
+</ParamField>
+
+### status
+
+Show gateway service status and probe reachability.
+
+```bash
+openclaw gateway status [options]
+```
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+### start
+
+Start the gateway as a background service.
+
+```bash
+openclaw gateway start
+```
+
+### stop
+
+Stop the gateway background service.
+
+```bash
+openclaw gateway stop
+```
+
+### restart
+
+Restart the gateway background service.
+
+```bash
+openclaw gateway restart
+```
+
+### discover
+
+Discover gateways via Bonjour (local + wide-area if configured).
+
+```bash
+openclaw gateway discover [options]
+```
+
+<ParamField path="--timeout <ms>" type="number">
+  Per-command timeout in ms (default: 2000)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+### call
+
+Call a Gateway RPC method directly.
+
+```bash
+openclaw gateway call <method> [options]
+```
+
+<ParamField path="method" type="string" required>
+  Method name: `health`, `status`, `system-presence`, or `cron.*`
+</ParamField>
+
+<ParamField path="--params <json>" type="string">
+  JSON object string for params (default: {})
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+### health
+
+Fetch Gateway health status.
+
+```bash
+openclaw gateway health [options]
+```
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+### probe
+
+Show gateway reachability + discovery + health + status summary (local + remote).
+
+```bash
+openclaw gateway probe [options]
+```
+
+<ParamField path="--url <url>" type="string">
+  Explicit Gateway WebSocket URL (still probes localhost)
+</ParamField>
+
+<ParamField path="--ssh <target>" type="string">
+  SSH target for remote gateway tunnel (user@host or user@host:port)
+</ParamField>
+
+<ParamField path="--ssh-identity <path>" type="string">
+  SSH identity file path
+</ParamField>
+
+<ParamField path="--ssh-auto" type="boolean">
+  Try to derive an SSH target from Bonjour discovery
+</ParamField>
+
+<ParamField path="--token <token>" type="string">
+  Gateway token (applies to all probes)
+</ParamField>
+
+<ParamField path="--password <password>" type="string">
+  Gateway password (applies to all probes)
+</ParamField>
+
+<ParamField path="--timeout <ms>" type="number">
+  Overall probe budget in ms (default: 3000)
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+```bash Basic
+# Run gateway on default port
+openclaw gateway run
+
+# Run with custom port
+openclaw gateway run --port 18790
+
+# Run with verbose output
+openclaw gateway run --verbose
+```
+
+```bash Authentication
+# Run with token authentication
+openclaw gateway run --auth token --token mySecretToken
+
+# Run with password authentication
+openclaw gateway run --auth password --password myPassword
+
+# Use environment variable for token
+export OPENCLAW_GATEWAY_TOKEN=mySecretToken
+openclaw gateway run
+```
+
+```bash Network
+# Bind to LAN interface
+openclaw gateway run --bind lan
+
+# Expose via Tailscale
+openclaw gateway run --tailscale serve
+
+# Bind to loopback only (local connections)
+openclaw gateway run --bind loopback
+```
+
+```bash Service Management
+# Start as background service
+openclaw gateway start
+
+# Check service status
+openclaw gateway status
+
+# Stop background service
+openclaw gateway stop
+
+# Restart service
+openclaw gateway restart
+```
+
+```bash Discovery
+# Discover gateways on network
+openclaw gateway discover
+
+# Discover with JSON output
+openclaw gateway discover --json
+
+# Probe gateway health
+openclaw gateway probe
+```
+</CodeGroup>
+
+<Warning>
+When binding to anything other than `loopback`, you must configure authentication (`--token` or `--password`) to prevent unauthorized access.
+</Warning>
+
+<Note>
+The gateway runs as a WebSocket server that agents and channels connect to. For production use, run it as a background service with `openclaw gateway start`.
+</Note>
+
+## Authentication
+
+The gateway supports three authentication modes:
+
+1. **Token**: Clients must provide a shared token
+2. **Password**: Clients must provide a shared password
+3. **None**: No authentication (only for loopback)
+
+Configure authentication in `~/.openclaw/config.json5`:
+
+```json5
+{
+  gateway: {
+    auth: {
+      mode: "token",
+      token: "your-secret-token"
+    }
+  }
+}
+```
+
+Or use environment variables:
+
+```bash
+export OPENCLAW_GATEWAY_TOKEN=your-secret-token
+openclaw gateway run
+```
+
+## Bind Modes
+
+- **loopback**: Bind to 127.0.0.1 (local connections only)
+- **lan**: Bind to LAN interface (accessible from local network)
+- **tailnet**: Expose via Tailscale (requires Tailscale setup)
+- **auto**: Automatically choose based on config
+- **custom**: Use custom bind address from config
+
+## Troubleshooting
+
+If the gateway fails to start:
+
+1. Check if another process is using the port: `lsof -i :18789`
+2. Use `--force` to kill existing listeners
+3. Check configuration: `openclaw config get gateway`
+4. Run diagnostics: `openclaw doctor`
+
+## Related Commands
+
+- [daemon](/cli/daemon) - Manage gateway as a system service
+- [logs](/cli/logs) - View gateway logs
+- [doctor](/cli/doctor) - Diagnose gateway issues

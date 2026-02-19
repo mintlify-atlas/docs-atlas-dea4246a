@@ -1,0 +1,688 @@
+---
+title: Troubleshooting Guide
+description: Diagnose and fix common OpenClaw issues with installation, gateway, channels, authentication, and performance
+---
+
+# Troubleshooting Guide
+
+This guide covers common issues and solutions for OpenClaw, organized by category.
+
+## Quick Diagnostics
+
+Run these commands first:
+
+```bash
+# Comprehensive health check
+openclaw doctor
+
+# Security audit
+openclaw security audit --deep
+
+# Channel status
+openclaw channels status --probe
+
+# Gateway health
+curl http://localhost:18789/health
+```
+
+## Installation Issues
+
+<AccordionGroup>
+  <Accordion title="Node.js version too old">
+    **Problem:** OpenClaw requires Node.js 22+.
+    
+    **Symptoms:**
+    ```
+    Error: OpenClaw requires Node.js >=22.0.0
+    ```
+    
+    **Fix:**
+    ```bash
+    # Install Node.js 22 via nvm
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    nvm install 22
+    nvm use 22
+    nvm alias default 22
+    
+    # Verify version
+    node --version  # Should be v22.x.x
+    
+    # Reinstall OpenClaw
+    npm install -g openclaw@latest
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission denied during install">
+    **Problem:** npm install fails with EACCES.
+    
+    **Fix:**
+    ```bash
+    # Option 1: Use nvm (recommended)
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    nvm install 22
+    npm install -g openclaw@latest
+    
+    # Option 2: Fix npm permissions
+    mkdir -p ~/.npm-global
+    npm config set prefix '~/.npm-global'
+    echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+    source ~/.bashrc
+    npm install -g openclaw@latest
+    
+    # Option 3: Use sudo (not recommended)
+    sudo npm install -g openclaw@latest --unsafe-perm
+    ```
+  </Accordion>
+  
+  <Accordion title="Command not found after install">
+    **Problem:** `openclaw` command not found after installation.
+    
+    **Fix:**
+    ```bash
+    # Find npm global bin path
+    npm config get prefix
+    
+    # Add to PATH (replace with your prefix)
+    echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
+    source ~/.bashrc
+    
+    # Or use npx
+    npx openclaw --version
+    ```
+  </Accordion>
+  
+  <Accordion title="Build fails from source">
+    **Problem:** `pnpm build` or `pnpm ui:build` fails.
+    
+    **Fix:**
+    ```bash
+    # Clean install
+    rm -rf node_modules ui/node_modules
+    rm -rf dist
+    pnpm install --frozen-lockfile
+    
+    # Build step by step
+    pnpm build
+    pnpm ui:build
+    
+    # Check for missing dependencies
+    pnpm install
+    
+    # Verify Node and pnpm versions
+    node --version  # 22+
+    pnpm --version  # 8+
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Gateway Issues
+
+<AccordionGroup>
+  <Accordion title="Gateway won't start">
+    **Problem:** Gateway fails to start.
+    
+    **Symptoms:**
+    ```
+    Error: gateway.mode is unset
+    Error: OPENCLAW_GATEWAY_TOKEN is required
+    ```
+    
+    **Fix:**
+    ```bash
+    # Check configuration
+    openclaw doctor
+    
+    # Set gateway mode
+    openclaw config set gateway.mode local
+    
+    # Generate token
+    openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+    
+    # Start gateway
+    openclaw gateway --bind loopback
+    ```
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    **Problem:** Port 18789 already bound.
+    
+    **Symptoms:**
+    ```
+    Error: listen EADDRINUSE: address already in use :::18789
+    ```
+    
+    **Fix:**
+    ```bash
+    # Find process using port
+    lsof -i :18789
+    # or
+    netstat -tlnp | grep 18789
+    
+    # Kill existing process
+    kill <PID>
+    
+    # Or use different port
+    openclaw gateway --port 18790
+    ```
+  </Accordion>
+  
+  <Accordion title="Gateway not accessible remotely">
+    **Problem:** Can't connect to gateway from other devices.
+    
+    **Fix:**
+    ```bash
+    # Check bind mode
+    openclaw config get gateway.bind
+    
+    # Set to LAN for network access
+    openclaw config set gateway.bind lan
+    
+    # Ensure authentication is configured
+    openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+    
+    # Check firewall
+    sudo ufw allow 18789/tcp  # Ubuntu/Debian
+    sudo firewall-cmd --add-port=18789/tcp --permanent  # RHEL/CentOS
+    
+    # Verify binding
+    netstat -tlnp | grep 18789
+    # Should show 0.0.0.0:18789, not 127.0.0.1:18789
+    ```
+  </Accordion>
+  
+  <Accordion title="Gateway crashes on startup">
+    **Problem:** Gateway starts then immediately crashes.
+    
+    **Debug:**
+    ```bash
+    # Run with debug logging
+    openclaw gateway --verbose --bind loopback
+    
+    # Check logs
+    journalctl --user -u openclaw-gateway -n 100  # systemd
+    ~/Library/Logs/OpenClaw/gateway.log  # macOS
+    
+    # Check config validity
+    openclaw doctor
+    
+    # Verify state directory
+    ls -la ~/.openclaw/
+    chmod 700 ~/.openclaw
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Channel Issues
+
+<AccordionGroup>
+  <Accordion title="WhatsApp QR code won't scan">
+    **Problem:** QR code doesn't appear or fails to scan.
+    
+    **Fix:**
+    ```bash
+    # Clear WhatsApp state
+    rm -rf ~/.openclaw/state/whatsapp/
+    
+    # Restart gateway
+    openclaw gateway restart
+    
+    # Check for QR code in logs
+    openclaw gateway --verbose
+    
+    # Use web UI for easier QR scanning
+    open http://localhost:18789
+    ```
+  </Accordion>
+  
+  <Accordion title="Telegram bot not responding">
+    **Problem:** Telegram bot doesn't reply to messages.
+    
+    **Debug:**
+    ```bash
+    # Check bot token
+    openclaw config get channels.telegram.botToken
+    
+    # Verify bot is running
+    openclaw channels status
+    
+    # Check allowlist
+    openclaw config get channels.telegram.allowFrom
+    
+    # Approve pairing
+    openclaw pairing list
+    openclaw pairing approve telegram <code>
+    
+    # Test bot
+    curl https://api.telegram.org/bot<TOKEN>/getMe
+    ```
+  </Accordion>
+  
+  <Accordion title="Discord bot offline">
+    **Problem:** Discord bot shows as offline.
+    
+    **Fix:**
+    ```bash
+    # Verify token
+    openclaw config get channels.discord.botToken
+    
+    # Check gateway logs
+    openclaw gateway --verbose
+    
+    # Verify intents (required: GUILD_MESSAGES, DIRECT_MESSAGES, MESSAGE_CONTENT)
+    # https://discord.com/developers/applications
+    
+    # Restart gateway
+    openclaw gateway restart
+    ```
+  </Accordion>
+  
+  <Accordion title="Signal not sending messages">
+    **Problem:** Signal channel fails to send.
+    
+    **Fix:**
+    ```bash
+    # Check signal-cli installation
+    which signal-cli
+    
+    # Verify registration
+    signal-cli -u +1234567890 receive
+    
+    # Check OpenClaw config
+    openclaw config get channels.signal.phoneNumber
+    
+    # Re-register if needed
+    signal-cli -u +1234567890 register
+    signal-cli -u +1234567890 verify <code>
+    ```
+  </Accordion>
+  
+  <Accordion title="Slack bot not in workspace">
+    **Problem:** Slack bot not responding.
+    
+    **Fix:**
+    ```bash
+    # Verify bot token
+    openclaw config get channels.slack.botToken
+    
+    # Check bot is in channel
+    # In Slack: /invite @openclaw
+    
+    # Verify scopes (required: chat:write, channels:history, groups:history)
+    # https://api.slack.com/apps
+    
+    # Restart gateway
+    openclaw gateway restart
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Authentication Issues
+
+<AccordionGroup>
+  <Accordion title="Unauthorized / 401 error">
+    **Problem:** Authentication fails when connecting to gateway.
+    
+    **Symptoms:**
+    ```
+    Error: Unauthorized (401)
+    Error: token_mismatch
+    ```
+    
+    **Fix:**
+    ```bash
+    # Verify token
+    openclaw config get gateway.auth.token
+    echo $OPENCLAW_GATEWAY_TOKEN
+    
+    # Regenerate token
+    openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+    
+    # Update environment
+    export OPENCLAW_GATEWAY_TOKEN="$(openclaw config get gateway.auth.token)"
+    
+    # Restart gateway
+    openclaw gateway restart
+    ```
+  </Accordion>
+  
+  <Accordion title="Rate limited">
+    **Problem:** Too many failed authentication attempts.
+    
+    **Symptoms:**
+    ```
+    Error: rate_limited
+    Retry after: 300000ms
+    ```
+    
+    **Fix:**
+    ```bash
+    # Wait 5 minutes for lockout to expire
+    
+    # Or restart gateway to reset limiter (not recommended)
+    openclaw gateway restart
+    
+    # Verify correct token
+    openclaw config get gateway.auth.token
+    ```
+    
+    Rate limiting config from `src/gateway/auth-rate-limit.ts`:
+    - Max attempts: 10
+    - Window: 1 minute
+    - Lockout: 5 minutes
+  </Accordion>
+  
+  <Accordion title="Pairing code not received">
+    **Problem:** DM pairing code not appearing.
+    
+    **Debug:**
+    ```bash
+    # Check DM policy
+    openclaw config get channels.discord.dmPolicy
+    
+    # List pending pairing codes
+    openclaw pairing list
+    
+    # Check gateway logs
+    openclaw gateway --verbose
+    
+    # Approve manually
+    openclaw pairing approve discord <user-id>
+    ```
+  </Accordion>
+  
+  <Accordion title="Claude login fails">
+    **Problem:** `openclaw login anthropic` fails.
+    
+    **Fix:**
+    ```bash
+    # Clear existing credentials
+    rm -rf ~/.openclaw/credentials/anthropic-*
+    
+    # Re-login
+    openclaw login anthropic
+    
+    # Or use API key
+    openclaw config set models.anthropic.apiKey sk-ant-...
+    
+    # Verify login
+    openclaw config get models.anthropic
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Gateway using too much memory">
+    **Problem:** High memory usage (>2GB).
+    
+    **Fix:**
+    ```bash
+    # Set Node memory limit
+    export NODE_OPTIONS="--max-old-space-size=1536"
+    openclaw gateway
+    
+    # Or in systemd service
+    # Edit: ~/.config/systemd/user/openclaw-gateway.service
+    [Service]
+    Environment="NODE_OPTIONS=--max-old-space-size=1536"
+    
+    # Clear session cache
+    openclaw sessions prune --older-than 30d
+    
+    # Restart gateway
+    openclaw gateway restart
+    ```
+  </Accordion>
+  
+  <Accordion title="Slow message responses">
+    **Problem:** Agent takes too long to respond.
+    
+    **Debug:**
+    ```bash
+    # Check model selection
+    openclaw config get agents.main.model
+    
+    # Use faster model
+    openclaw config set agents.main.model claude-haiku-4
+    
+    # Reduce thinking mode
+    openclaw agent --message "test" --thinking low
+    
+    # Check network latency
+    ping api.anthropic.com
+    
+    # View verbose logs
+    openclaw gateway --verbose
+    ```
+  </Accordion>
+  
+  <Accordion title="Gateway CPU usage high">
+    **Problem:** Gateway consuming >50% CPU.
+    
+    **Debug:**
+    ```bash
+    # Check running sessions
+    openclaw sessions list
+    
+    # Stop idle sessions
+    openclaw sessions stop <session-id>
+    
+    # Check for runaway tools
+    openclaw gateway --verbose | grep -i "tool"
+    
+    # Restart gateway
+    openclaw gateway restart
+    ```
+  </Accordion>
+  
+  <Accordion title="Disk space filling up">
+    **Problem:** ~/.openclaw/ growing too large.
+    
+    **Fix:**
+    ```bash
+    # Check disk usage
+    du -sh ~/.openclaw/*
+    
+    # Clean old sessions
+    openclaw sessions prune --older-than 30d
+    
+    # Clean workspace temp files
+    find ~/.openclaw/workspace -name "*.tmp" -delete
+    
+    # Clean logs
+    journalctl --user --vacuum-time=7d
+    
+    # Backup and remove old state
+    tar -czf openclaw-backup-$(date +%Y%m%d).tar.gz ~/.openclaw/
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Docker Issues
+
+<AccordionGroup>
+  <Accordion title="Container won't start">
+    **Problem:** Docker container exits immediately.
+    
+    **Debug:**
+    ```bash
+    # Check logs
+    docker logs openclaw-gateway
+    
+    # Run interactively
+    docker run -it --entrypoint /bin/bash openclaw:local
+    
+    # Verify environment variables
+    docker exec openclaw-gateway env | grep OPENCLAW
+    
+    # Check volumes
+    docker inspect openclaw-gateway | grep -A 10 Mounts
+    ```
+  </Accordion>
+  
+  <Accordion title="Volume permissions error">
+    **Problem:** Permission denied accessing mounted volumes.
+    
+    **Fix:**
+    ```bash
+    # Fix host directory permissions (container runs as UID 1000)
+    sudo chown -R 1000:1000 ~/.openclaw
+    
+    # Or run as root (not recommended)
+    docker run --user root openclaw:local
+    ```
+  </Accordion>
+  
+  <Accordion title="Can't connect to containerized gateway">
+    **Problem:** Gateway unreachable from host.
+    
+    **Fix:**
+    ```bash
+    # Ensure correct bind mode
+    docker run \
+      -e OPENCLAW_GATEWAY_BIND=lan \
+      -p 18789:18789 \
+      openclaw:local node openclaw.mjs gateway --bind lan
+    
+    # Check port mapping
+    docker port openclaw-gateway
+    
+    # Test from inside container
+    docker exec openclaw-gateway curl localhost:18789/health
+    
+    # Test from host
+    curl localhost:18789/health
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Diagnostic Commands
+
+### System Information
+
+```bash
+# OpenClaw version
+openclaw --version
+
+# Node.js version
+node --version
+
+# System info
+uname -a
+
+# Check disk space
+df -h ~/.openclaw
+
+# Check memory
+free -h
+```
+
+### Gateway Diagnostics
+
+```bash
+# Health check
+curl http://localhost:18789/health
+
+# With authentication
+curl -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
+     http://localhost:18789/health
+
+# Check gateway process
+ps aux | grep openclaw
+
+# Check listening ports
+netstat -tlnp | grep openclaw
+lsof -i :18789
+```
+
+### Configuration Diagnostics
+
+```bash
+# View full config
+openclaw config list
+
+# Validate config
+openclaw doctor
+
+# Check specific values
+openclaw config get gateway
+openclaw config get channels
+openclaw config get agents
+```
+
+### Log Analysis
+
+```bash
+# Gateway logs (systemd)
+journalctl --user -u openclaw-gateway -f
+journalctl --user -u openclaw-gateway -n 100 --no-pager
+
+# macOS logs
+tail -f ~/Library/Logs/OpenClaw/gateway.log
+
+# Docker logs
+docker logs -f openclaw-gateway
+docker logs --tail 100 openclaw-gateway
+
+# Session logs
+tail -f ~/.openclaw/agents/main/sessions/main.jsonl
+```
+
+## Getting Help
+
+If issues persist:
+
+<Steps>
+  <Step title="Run full diagnostics">
+    ```bash
+    openclaw doctor > doctor-output.txt
+    openclaw security audit --deep > audit-output.txt
+    openclaw channels status --probe > channels-output.txt
+    ```
+  </Step>
+  
+  <Step title="Collect logs">
+    ```bash
+    # systemd
+    journalctl --user -u openclaw-gateway -n 200 > gateway-logs.txt
+    
+    # Docker
+    docker logs openclaw-gateway > docker-logs.txt
+    ```
+  </Step>
+  
+  <Step title="Check GitHub Issues">
+    Search existing issues: https://github.com/openclaw/openclaw/issues
+  </Step>
+  
+  <Step title="Ask on Discord">
+    Join the community: https://discord.gg/clawd
+  </Step>
+  
+  <Step title="File a bug report">
+    Include:
+    - OpenClaw version
+    - Platform and Node version
+    - `openclaw doctor` output
+    - Relevant logs
+    - Steps to reproduce
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Security Audit" icon="shield" href="/guides/security">
+    Run security checks and fix issues
+  </Card>
+  <Card title="Deployment Guide" icon="cloud" href="/guides/deployment">
+    Deploy with best practices
+  </Card>
+  <Card title="Doctor Command" icon="stethoscope" href="/gateway/doctor">
+    Detailed doctor command reference
+  </Card>
+  <Card title="Discord Support" icon="discord" href="https://discord.gg/clawd">
+    Get help from the community
+  </Card>
+</CardGroup>

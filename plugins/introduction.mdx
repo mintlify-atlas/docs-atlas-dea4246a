@@ -1,0 +1,101 @@
+---
+title: "Introduction to Plugins"
+description: "Extend OpenClaw with custom channels, tools, and hooks"
+---
+
+OpenClaw's plugin system allows you to extend the AI gateway with custom channels, tools, hooks, and services. Plugins enable you to integrate new messaging platforms, add domain-specific agent capabilities, and customize behavior at every stage of the message lifecycle.
+
+## What Are Plugins?
+
+Plugins are JavaScript/TypeScript modules that register extensions via the Plugin API. They can:
+
+- **Add custom channels** - Integrate new messaging platforms (Matrix, Microsoft Teams, IRC, etc.)
+- **Register agent tools** - Extend agent capabilities with custom actions and integrations
+- **Implement hooks** - Intercept and modify behavior at key lifecycle points
+- **Run background services** - Add persistent background tasks (diagnostics, monitoring, etc.)
+- **Extend the CLI** - Add custom commands to the `openclaw` CLI
+- **Handle HTTP requests** - Expose webhooks and custom API endpoints
+
+## Why Build Plugins?
+
+Plugins let you customize OpenClaw without forking the core codebase:
+
+- **Channel integrations** - Connect OpenClaw to any messaging platform
+- **Domain-specific tools** - Add specialized agent capabilities for your workflow
+- **Custom hooks** - Log agent activity, implement memory systems, modify prompts
+- **Enterprise integrations** - Connect to internal systems, databases, or APIs
+- **Observability** - Export telemetry, metrics, and diagnostics
+
+## Plugin Capabilities
+
+### Channels
+
+Channel plugins integrate messaging platforms. A channel plugin implements adapters for:
+
+- Message sending/receiving
+- Authentication and pairing
+- Group management and mentions
+- Directory listing (users, groups)
+- Status checks and probing
+
+Examples: `@openclaw/matrix`, `@openclaw/msteams`, `extensions/irc`
+
+### Tools
+
+Tool plugins add new agent capabilities. Tools are exposed to the LLM and can be called during agent runs:
+
+- Custom actions (send email, create ticket, query database)
+- Integrations (Slack actions, WhatsApp login, voice calls)
+- Workflow automation (task management, approvals)
+
+Examples: `extensions/llm-task`, channel-specific tools
+
+### Hooks
+
+Hooks let you intercept and modify behavior at key lifecycle points:
+
+- **Agent lifecycle** - `before_agent_start`, `llm_input`, `llm_output`, `agent_end`
+- **Message flow** - `message_received`, `message_sending`, `message_sent`
+- **Tool execution** - `before_tool_call`, `after_tool_call`, `tool_result_persist`
+- **Session management** - `session_start`, `session_end`, `before_compaction`
+- **Gateway lifecycle** - `gateway_start`, `gateway_stop`
+
+Examples: bundled hooks (`src/hooks/bundled/`), plugin hooks
+
+### Services
+
+Service plugins run background tasks:
+
+- Diagnostics and monitoring
+- Metrics export (OpenTelemetry)
+- Scheduled tasks
+- Background processing
+
+Examples: `extensions/diagnostics-otel`
+
+## Plugin Distribution
+
+Plugins can be distributed in three ways:
+
+1. **npm packages** - `@openclaw/matrix`, `@openclaw/msteams` (recommended for public plugins)
+2. **Workspace packages** - `extensions/` directory (monorepo pattern, used by OpenClaw core)
+3. **Local directories** - `~/.openclaw/extensions/` (user-installed plugins)
+
+## Getting Started
+
+Ready to build your first plugin? Continue to:
+
+- [Plugin Architecture](/plugins/architecture) - Understand how plugins work
+- [Getting Started Guide](/plugins/getting-started) - Create your first plugin
+- [Plugin SDK Reference](/plugins/plugin-sdk) - Explore the Plugin API
+
+## Example Plugins
+
+OpenClaw includes 39+ built-in extensions demonstrating plugin patterns:
+
+- **Channels**: `matrix`, `msteams`, `irc`, `telegram`, `slack`, `signal`, `discord`
+- **Tools**: `llm-task`, `phone-control`, `voice-call`
+- **Services**: `diagnostics-otel`, `memory-lancedb`, `copilot-proxy`
+- **Auth**: `google-antigravity-auth`, `minimax-portal-auth`
+
+Browse the [extensions directory](https://github.com/openclaw/openclaw/tree/main/extensions) for real-world examples.

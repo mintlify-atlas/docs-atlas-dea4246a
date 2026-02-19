@@ -1,0 +1,410 @@
+---
+title: Web Control UI
+summary: Browser-based control interface for Gateway management, chat, and configuration
+---
+
+# Web Control UI
+
+The Control UI is a **browser-based interface** for managing the OpenClaw Gateway. It's a Vite + Lit single-page app served directly from the Gateway.
+
+## Quick access
+
+**Local (same machine as Gateway):**
+
+- [http://127.0.0.1:18789/](http://127.0.0.1:18789/)
+- [http://localhost:18789/](http://localhost:18789/)
+
+**Remote (LAN/Tailnet):**
+
+- `http://<gateway-host>:18789/`
+- `https://<magicdns>/` (Tailscale Serve, recommended)
+
+If the page fails to load, start the Gateway first:
+```bash
+openclaw gateway
+```
+
+## Features
+
+The Control UI provides full Gateway management through the browser:
+
+### Chat
+- Send messages to the model via Gateway WebSocket
+- View session history with `chat.history`
+- Stream tool calls and live tool output cards
+- Abort in-flight runs with Stop button or `/stop` command
+- Inject assistant notes directly to transcript (`chat.inject`)
+- Partial abort retention: See partial assistant output when runs are stopped
+
+### Channels
+- View status of all channels (WhatsApp, Telegram, Discord, Slack, plugins)
+- QR code login for WhatsApp
+- Per-channel configuration via forms
+- Enable/disable channels
+- Channel authentication and pairing
+
+### Configuration
+- View and edit `~/.openclaw/openclaw.json`
+- Schema-driven form rendering (including plugin and channel schemas)
+- Raw JSON editor for advanced use
+- Apply and restart Gateway with validation
+- Base-hash guard prevents concurrent edit clobbers
+
+### Sessions
+- List all Gateway sessions
+- Per-session thinking/verbose overrides
+- Switch active session context
+- View token counts and history metadata
+
+### Nodes
+- List connected nodes (macOS, iOS, Android)
+- View node capabilities and permissions
+- Invoke node commands
+- Node status and connection health
+
+### Exec Approvals
+- Edit Gateway or node allowlists for `exec` commands
+- Configure ask policy: `never`, `on-miss`, `always`
+- Security modes: `deny`, `allowlist`, `ask`, `allow`
+- Add/remove allowlist patterns
+- View last-used metadata for cleanup
+
+### Cron Jobs
+- List scheduled jobs with run history
+- Add/edit/enable/disable jobs
+- Run jobs manually
+- Configure delivery modes:
+  - Announce summary (with channel/target)
+  - Webhook (with optional bearer token)
+  - None (internal-only)
+- Isolated vs main-session jobs
+
+### Skills
+- View installed skills and status
+- Enable/disable skills
+- Install new skills
+- Update skill API keys
+
+### Logs
+- Live tail of Gateway log files
+- Filter by level, category, subsystem
+- Export logs to file
+- Search log content
+
+### Debug
+- Status/health/models snapshots
+- Event log viewer
+- Manual RPC calls to Gateway
+- Presence list and refresh
+- Instance coordination
+
+### Updates
+- Run package/git updates
+- Restart Gateway with validation
+- View restart report
+
+## Authentication
+
+The Control UI authenticates during WebSocket handshake:
+
+**Token-based:**
+```bash
+# Set in config
+openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+
+# Paste token in UI Settings (stored in browser localStorage)
+```
+
+**Password-based:**
+```bash
+# Set in config
+openclaw config set gateway.auth.password "your-password"
+
+# Enter in UI Settings (kept in memory only, not persisted)
+```
+
+The onboarding wizard generates a gateway token by default.
+
+## Device pairing
+
+When connecting from a new browser or device, Gateway requires **one-time pairing approval**:
+
+**What you'll see:** "disconnected (1008): pairing required"
+
+**To approve:**
+```bash
+# List pending requests
+openclaw devices list
+
+# Approve by request ID
+openclaw devices approve <requestId>
+```
+
+Once approved, the device is remembered. Revoke with:
+```bash
+openclaw devices revoke --device <id> --role <role>
+```
+
+**Notes:**
+- Local connections (`127.0.0.1`) are auto-approved
+- Remote connections (LAN, Tailnet) require explicit approval
+- Each browser profile generates unique device ID
+- Clearing browser data requires re-pairing
+
+See [Devices CLI](/cli/devices) for management.
+
+## Remote access
+
+### Tailscale Serve (recommended)
+
+Keep Gateway on loopback and let Tailscale proxy with HTTPS:
+
+```bash
+openclaw gateway --tailscale serve
+```
+
+Open: `https://<magicdns>/`
+
+By default, Serve requests authenticate via Tailscale identity headers (`tailscale-user-login`) when `gateway.auth.allowTailscale: true`. OpenClaw verifies identity by resolving `x-forwarded-for` with `tailscale whois`.
+
+Disable Tailscale auth:
+```json5
+{
+  gateway: {
+    auth: {
+      mode: "password",  // or "token"
+      allowTailscale: false
+    }
+  }
+}
+```
+
+### Bind to tailnet
+
+```bash
+openclaw gateway --bind tailnet --token "$(openssl rand -hex 32)"
+```
+
+Open: `http://<tailscale-ip>:18789/`
+
+Paste token in UI Settings.
+
+### SSH tunnel
+
+```bash
+ssh -L 18789:localhost:18789 user@gateway-host
+```
+
+Open: `http://localhost:18789/`
+
+See [Gateway remote access](/gateway/remote) for details.
+
+## WebChat channel
+
+The Control UI Chat tab uses the **WebChat channel**:
+- Native Gateway WebSocket integration (no separate server)
+- Deterministic routing: replies always return to WebChat
+- Uses same sessions and routing rules as other channels
+- Shared history with macOS/iOS apps via Gateway sessions
+
+Configuration:
+- No dedicated `webchat.*` config block
+- Uses `gateway.port`, `gateway.bind`, `gateway.auth.*` settings
+
+See [WebChat](/web/webchat) for protocol details.
+
+## Chat behavior
+
+**Non-blocking sends:**
+- `chat.send` acks immediately with `{runId, status: "started"}`
+- Response streams via `chat` events
+- Re-sending same `idempotencyKey` returns:
+  - `{status: "in_flight"}` while running
+  - `{status: "ok"}` after completion
+
+**History size limits:**
+- `chat.history` responses are size-bounded for UI safety
+- Gateway may truncate long text fields
+- Oversized messages replaced with `[chat.history omitted: message too large]`
+
+**Abort behavior:**
+- Click **Stop** button (calls `chat.abort`)
+- Type `/stop` (or `stop|esc|abort|wait|exit|interrupt`)
+- `chat.abort` supports `{sessionKey}` to abort all runs for session
+- Partial assistant text persisted with abort metadata
+
+**Inject notes:**
+- `chat.inject` appends assistant note to transcript
+- Broadcasts `chat` event for UI-only update
+- No agent run, no channel delivery
+
+## Insecure HTTP
+
+Over plain HTTP (`http://<lan-ip>` or `http://<tailscale-ip>`), browsers run in **non-secure context** and block WebCrypto. By default, OpenClaw blocks Control UI connections without device identity.
+
+**Recommended fix:** Use HTTPS or local access:
+- `https://<magicdns>/` (Tailscale Serve)
+- `http://127.0.0.1:18789/` (on gateway host)
+
+**Downgrade (token-only over HTTP):**
+```json5
+{
+  gateway: {
+    controlUi: { allowInsecureAuth: true },
+    bind: "tailnet",
+    auth: { mode: "token", token: "replace-me" }
+  }
+}
+```
+
+This disables device identity + pairing. Use only on trusted networks.
+
+See [Tailscale setup](/gateway/tailscale) for HTTPS guidance.
+
+## Building the UI
+
+The Gateway serves static files from `dist/control-ui`:
+
+```bash
+# Build UI (auto-installs deps on first run)
+pnpm ui:build
+
+# With absolute base path
+OPENCLAW_CONTROL_UI_BASE_PATH=/openclaw/ pnpm ui:build
+
+# Dev server (separate from Gateway)
+pnpm ui:dev
+```
+
+Dev server then open:
+```
+http://localhost:5173/?gatewayUrl=ws://<gateway-host>:18789&token=<gateway-token>
+```
+
+**Dev server notes:**
+- `gatewayUrl` stored in localStorage after load
+- `token` stored in localStorage; `password` kept in memory only
+- When `gatewayUrl` set, explicit credentials required (no config fallback)
+- Use `wss://` for TLS (Tailscale Serve, HTTPS proxy)
+- `gatewayUrl` only accepted in top-level window (not embedded)
+
+For cross-origin setups, add UI origin to `gateway.controlUi.allowedOrigins`:
+```json5
+{
+  gateway: {
+    controlUi: {
+      allowedOrigins: ["http://localhost:5173"]
+    }
+  }
+}
+```
+
+See [Remote access](/gateway/remote) for setup details.
+
+## Base path configuration
+
+Optional URL prefix for reverse proxies:
+
+```json5
+{
+  gateway: {
+    controlUi: {
+      basePath: "/openclaw"  // Access at http://host:18789/openclaw
+    }
+  }
+}
+```
+
+Rebuild UI with matching base:
+```bash
+OPENCLAW_CONTROL_UI_BASE_PATH=/openclaw/ pnpm ui:build
+```
+
+## Cron jobs panel
+
+**Delivery modes:**
+- **Announce summary**: Post to channel/target (channel and target fields appear)
+- **Webhook**: POST to URL with optional bearer token (set `cron.webhookToken` in config)
+- **None**: Internal-only runs (no delivery)
+
+**Job types:**
+- **Isolated jobs**: Separate context, delivery defaults to announce
+- **Main-session jobs**: Use main session, webhook and none modes available
+
+**Legacy fallback:**
+Stored jobs with `notify: true` can still use `cron.webhook` until migrated.
+
+## Troubleshooting
+
+### Connection fails with "pairing required"
+
+1. List pending devices:
+```bash
+openclaw devices list
+```
+
+2. Approve:
+```bash
+openclaw devices approve <requestId>
+```
+
+3. Or use local access (auto-approved):
+```
+http://127.0.0.1:18789/
+```
+
+### WebSocket connection fails
+
+1. Verify Gateway is running:
+```bash
+openclaw gateway status
+```
+
+2. Check port is listening:
+```bash
+ss -ltnp | grep 18789
+# or
+lsof -i :18789
+```
+
+3. Test WebSocket:
+```bash
+wscat -c ws://localhost:18789
+```
+
+### "device identity required" over HTTP
+
+Browser blocked WebCrypto in non-secure context.
+
+**Fix:**
+- Use HTTPS: `https://<magicdns>/` (Tailscale Serve)
+- Use local: `http://127.0.0.1:18789/`
+- Or downgrade: Set `gateway.controlUi.allowInsecureAuth: true`
+
+See [Insecure HTTP](#insecure-http) section above.
+
+### Config changes not saving
+
+1. Check for concurrent edits:
+   - UI includes base-hash guard
+   - Reload UI and try again
+
+2. Verify config file writable:
+```bash
+ls -la ~/.openclaw/openclaw.json
+```
+
+3. Check Gateway logs for validation errors:
+```bash
+openclaw logs tail --filter error
+```
+
+## Related documentation
+
+- [Gateway runbook](/gateway)
+- [Gateway configuration](/gateway/configuration)
+- [Gateway remote access](/gateway/remote)
+- [WebChat channel](/web/webchat)
+- [Gateway protocol](/gateway/protocol)
+- [Devices CLI](/cli/devices)
+- [Tailscale integration](/gateway/tailscale)

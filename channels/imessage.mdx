@@ -1,0 +1,438 @@
+---
+title: iMessage Channel
+description: Connect OpenClaw to iMessage on macOS using Messages.app integration
+---
+
+iMessage integration on macOS allows OpenClaw to send and receive messages through Apple's Messages app. This requires system-level access to the Messages database and AppleScript automation.
+
+<Warning>
+  **macOS only** - iMessage integration is only available on macOS. It requires Full Disk Access permissions and cannot be sandboxed.
+</Warning>
+
+## Prerequisites
+
+- macOS 10.15 (Catalina) or later
+- Messages.app configured with iMessage
+- [imsg CLI tool](https://github.com/CamHenlin/imsg) (optional but recommended)
+- Full Disk Access for Terminal/OpenClaw
+
+## Quick Start
+
+The interactive onboarding can guide you through iMessage setup:
+
+```bash
+openclaw init
+```
+
+Select iMessage and follow the prompts.
+
+## Installing imsg
+
+### Using Homebrew
+
+```bash
+brew install imsg
+```
+
+### From Source
+
+```bash
+git clone https://github.com/CamHenlin/imsg.git
+cd imsg
+npm install -g .
+```
+
+### Verify Installation
+
+```bash
+imsg --version
+```
+
+## Granting Permissions
+
+<Steps>
+  <Step title="Grant Full Disk Access">
+    iMessage integration requires access to the Messages database.
+
+    1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
+    2. Click the **+** button
+    3. Add:
+       - **Terminal.app** (if running OpenClaw from Terminal)
+       - **OpenClaw.app** (if using the Mac app)
+    4. Restart Terminal/OpenClaw after granting access
+  </Step>
+
+  <Step title="Grant Automation Access">
+    AppleScript automation requires explicit permission.
+
+    1. Open **System Settings** → **Privacy & Security** → **Automation**
+    2. Find **Terminal** or **OpenClaw** in the list
+    3. Enable **Messages.app**
+
+    You may be prompted to grant access the first time OpenClaw tries to send a message.
+  </Step>
+
+  <Step title="Verify Messages.app is signed in">
+    Open Messages.app and ensure you're signed in with your Apple ID. Send a test message to verify iMessage is working.
+  </Step>
+</Steps>
+
+## Configuration
+
+### Basic Setup
+
+Configure iMessage in `openclaw.config.json`:
+
+```json
+{
+  "channels": {
+    "imessage": {
+      "enabled": true,
+      "cliPath": "imsg",
+      "dmPolicy": "pairing",
+      "allowFrom": []
+    }
+  }
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable iMessage channel |
+| `cliPath` | string | `"imsg"` | Path to imsg binary |
+| `dbPath` | string | Auto-detected | Path to Messages database (usually `~/Library/Messages/chat.db`) |
+| `dmPolicy` | string | `"pairing"` | DM access policy: `pairing`, `allowlist`, `open`, `disabled` |
+| `allowFrom` | string[] | `[]` | Allowed handles (phone numbers, emails, or chat IDs) |
+
+### DM Policies
+
+- **`pairing`** (recommended): Unknown senders get a pairing code; approve with `openclaw pairing approve imessage <handle>`
+- **`allowlist`**: Only handles in `allowFrom` can message
+- **`open`**: Anyone can message (set `allowFrom: ["*"]`)
+- **`disabled`**: Ignore all iMessages
+
+### AllowFrom Formats
+
+iMessage supports several identifier formats:
+
+**Phone numbers (E.164 format):**
+```json
+{
+  "channels": {
+    "imessage": {
+      "allowFrom": ["+15555550123", "+447700900123"]
+    }
+  }
+}
+```
+
+**Email addresses:**
+```json
+{
+  "channels": {
+    "imessage": {
+      "allowFrom": ["alice@example.com", "bob@example.com"]
+    }
+  }
+}
+```
+
+**Chat identifiers:**
+```json
+{
+  "channels": {
+    "imessage": {
+      "allowFrom": [
+        "chat_id:123",
+        "chat_guid:iMessage;-;+15555550123",
+        "chat_identifier:chat123456789"
+      ]
+    }
+  }
+}
+```
+
+## Group Chat Configuration
+
+iMessage group chats are identified by a chat ID or GUID. To configure per-group settings:
+
+```json
+{
+  "channels": {
+    "imessage": {
+      "chats": {
+        "chat123": {
+          "enabled": true,
+          "requireMention": false,
+          "allowFrom": ["+15555550123"],
+          "toolPolicy": "open"
+        }
+      }
+    }
+  }
+}
+```
+
+Get chat IDs with:
+
+```bash
+imsg chats --limit 20
+```
+
+## Listing Chats
+
+To see available chats:
+
+```bash
+imsg chats --limit 50
+```
+
+Output includes:
+- Chat ID
+- Display name (for group chats)
+- Participants
+- Last message date
+
+## Media Handling
+
+iMessage supports:
+- Images (JPEG, PNG, HEIC)
+- Videos (MOV, MP4)
+- Audio files
+- Voice memos
+- Files and documents
+
+Media attachments are automatically downloaded and processed.
+
+## Reactions
+
+iMessage supports "Tapback" reactions:
+- ❤️ Love
+- 👍 Thumbs Up
+- 👎 Thumbs Down
+- 😂 Laugh
+- !! Emphasize
+- ?? Question
+
+```json
+{
+  "channels": {
+    "imessage": {
+      "reactions": {
+        "enabled": true
+      }
+    }
+  }
+}
+```
+
+## Multi-Account Support
+
+You can configure multiple iMessage accounts (rare, but supported):
+
+```json
+{
+  "channels": {
+    "imessage": {
+      "accounts": {
+        "personal": {
+          "enabled": true,
+          "service": "iMessage",
+          "allowFrom": ["+15555550123"]
+        },
+        "sms": {
+          "enabled": true,
+          "service": "SMS",
+          "allowFrom": ["+15555550456"]
+        }
+      }
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Full Disk Access denied">
+    Without Full Disk Access, OpenClaw cannot read the Messages database.
+
+    1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
+    2. Add Terminal.app or OpenClaw.app
+    3. **Restart** the application after granting access
+
+    Verify access:
+
+    ```bash
+    ls ~/Library/Messages/chat.db
+    ```
+
+    If this shows "Operation not permitted", access is not granted.
+  </Accordion>
+
+  <Accordion title="Cannot send messages">
+    This usually means Automation permission is missing.
+
+    1. Try sending a message manually - you should see a permission prompt
+    2. If no prompt appears:
+       - Open **System Settings** → **Privacy & Security** → **Automation**
+       - Find Terminal or OpenClaw
+       - Enable **Messages.app**
+    3. Restart OpenClaw
+
+    Test with imsg:
+
+    ```bash
+    imsg send -h "+15555550123" -m "Test message"
+    ```
+  </Accordion>
+
+  <Accordion title="imsg not found">
+    Ensure imsg is installed and in your PATH:
+
+    ```bash
+    which imsg
+    ```
+
+    If not found:
+    1. Install via Homebrew: `brew install imsg`
+    2. Or specify full path in config:
+
+    ```json
+    {
+      "channels": {
+        "imessage": {
+          "cliPath": "/usr/local/bin/imsg"
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Messages not being received">
+    Check these:
+
+    1. **Messages.app is running and signed in**
+    2. **Sender is in allowFrom** (if using allowlist policy)
+    3. **Database polling is working**
+
+    Check logs:
+
+    ```bash
+    openclaw logs --follow | grep imessage
+    ```
+
+    Verify database access:
+
+    ```bash
+    imsg chats --limit 10
+    ```
+  </Accordion>
+
+  <Accordion title="Database locked error">
+    The Messages database can only be accessed by one process at a time.
+
+    - Close Messages.app preferences if open
+    - Ensure no other tools are accessing the database
+    - Restart Messages.app
+
+    If persistent, restart macOS.
+  </Accordion>
+
+  <Accordion title="Group chats not working">
+    Group chats require:
+    1. All participants using iMessage (blue bubbles)
+    2. Correct chat ID in configuration
+
+    List group chats:
+
+    ```bash
+    imsg chats --limit 50 | grep -i group
+    ```
+
+    Add the chat ID to your config.
+  </Accordion>
+</AccordionGroup>
+
+## Limitations
+
+- **macOS only** - Cannot run on Linux or Windows
+- **Requires Messages.app** - Must be running and signed in
+- **SMS limitations** - SMS (green bubbles) may have limited features
+- **Polling-based** - Message delivery is not instant (typically 1-5 seconds)
+- **No read receipts** - Cannot detect when messages are read
+- **Sandbox incompatible** - Cannot run in a sandboxed environment
+
+## Advanced Configuration
+
+### Custom Database Path
+
+```json
+{
+  "channels": {
+    "imessage": {
+      "dbPath": "/Users/username/Library/Messages/chat.db"
+    }
+  }
+}
+```
+
+### Service Type
+
+iMessage supports both iMessage and SMS:
+
+```json
+{
+  "channels": {
+    "imessage": {
+      "service": "iMessage"
+    }
+  }
+}
+```
+
+Options:
+- `"iMessage"` (default) - iMessage only (blue bubbles)
+- `"SMS"` - SMS/MMS (green bubbles, requires iPhone)
+
+### Polling Interval
+
+```json
+{
+  "channels": {
+    "imessage": {
+      "pollInterval": 2000
+    }
+  }
+}
+```
+
+Interval in milliseconds (default: 2000 = 2 seconds).
+
+## Security Considerations
+
+- **Full Disk Access** is required - this grants broad system access
+- **Messages database** contains all your iMessage history
+- **Automation access** allows sending messages on your behalf
+- **Use allowlist mode** to restrict who can access your bot
+- **Backup your database** regularly (it's in `~/Library/Messages/`)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Pairing Guide" icon="qrcode" href="/channels/pairing">
+    Learn about pairing codes and approvals
+  </Card>
+  
+  <Card title="WhatsApp Setup" icon="whatsapp" href="/channels/whatsapp">
+    Set up WhatsApp as another channel
+  </Card>
+  
+  <Card title="Configuration Reference" icon="gear" href="/configuration">
+    Full configuration options
+  </Card>
+  
+  <Card title="Multi-Channel" icon="network-wired" href="/channels/overview">
+    Using multiple channels together
+  </Card>
+</CardGroup>

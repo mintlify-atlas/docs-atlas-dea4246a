@@ -1,0 +1,437 @@
+---
+title: "WebSocket Protocol"
+description: "WebSocket connection, RPC protocol, and event streaming"
+---
+
+# WebSocket Protocol
+
+The OpenClaw Gateway WebSocket API provides real-time bidirectional communication for agent interactions, event streaming, and control plane operations.
+
+## Connection
+
+### Endpoint
+
+```
+ws://localhost:18789/
+```
+
+For secure connections:
+
+```
+wss://your-domain:18789/
+```
+
+### Connection Flow
+
+1. **Open WebSocket connection**
+2. **Send `connect` method** with authentication
+3. **Receive `connect.challenge`** event (optional, for device pairing)
+4. **Receive connection response**
+5. **Subscribe to events** (optional)
+6. **Invoke RPC methods**
+
+### Example Connection
+
+```javascript
+const ws = new WebSocket('ws://localhost:18789');
+
+ws.onopen = () => {
+  // Authenticate
+  ws.send(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "connect",
+    params: {
+      role: "control",
+      auth: {
+        token: "your-token-here"
+      },
+      client: {
+        name: "My Client",
+        version: "1.0.0",
+        platform: "web"
+      }
+    }
+  }));
+};
+
+ws.onmessage = (event) => {
+  const frame = JSON.parse(event.data);
+  console.log('Received:', frame);
+};
+```
+
+## Message Format
+
+All messages follow JSON-RPC 2.0 format.
+
+### Request Frame
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "unique-request-id",
+  "method": "method.name",
+  "params": {
+    "key": "value"
+  }
+}
+```
+
+<ParamField path="jsonrpc" type="string" required>
+  Must be `"2.0"`
+</ParamField>
+
+<ParamField path="id" type="string | number" required>
+  Unique request identifier for matching responses
+</ParamField>
+
+<ParamField path="method" type="string" required>
+  RPC method name (e.g., `"agent"`, `"send"`, `"sessions.list"`)
+</ParamField>
+
+<ParamField path="params" type="object">
+  Method-specific parameters
+</ParamField>
+
+### Response Frame
+
+```json
+{
+  "id": "unique-request-id",
+  "ok": true,
+  "payload": {
+    "result": "data"
+  },
+  "error": null
+}
+```
+
+<ResponseField name="id" type="string | number">
+  Matches request `id`
+</ResponseField>
+
+<ResponseField name="ok" type="boolean">
+  `true` for success, `false` for errors
+</ResponseField>
+
+<ResponseField name="payload" type="object">
+  Method-specific response data (when `ok: true`)
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  Error details (when `ok: false`)
+</ResponseField>
+
+### Error Response
+
+```json
+{
+  "id": "unique-request-id",
+  "ok": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error message"
+  }
+}
+```
+
+## Authentication
+
+Authenticate during the initial `connect` call:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "connect",
+  "params": {
+    "role": "control",
+    "auth": {
+      "token": "your-token-here"
+    },
+    "client": {
+      "name": "My Client",
+      "version": "1.0.0",
+      "mode": "control",
+      "platform": "web"
+    }
+  }
+}
+```
+
+<ParamField path="role" type="string" required>
+  Client role: `control`, `node`, or `webchat`
+</ParamField>
+
+<ParamField path="auth" type="object" required>
+  Authentication credentials
+</ParamField>
+
+<ParamField path="auth.token" type="string">
+  Bearer token or device token
+</ParamField>
+
+<ParamField path="auth.password" type="string">
+  Password (alternative to token)
+</ParamField>
+
+<ParamField path="client" type="object" required>
+  Client metadata
+</ParamField>
+
+See [Authentication](/api/authentication) for details.
+
+## Event Streaming
+
+The Gateway broadcasts events to subscribed clients.
+
+### Event Frame
+
+```json
+{
+  "event": "event.name",
+  "payload": {
+    "data": "value"
+  }
+}
+```
+
+<ResponseField name="event" type="string">
+  Event name
+</ResponseField>
+
+<ResponseField name="payload" type="object">
+  Event-specific data
+</ResponseField>
+
+### Available Events
+
+| Event | Description |
+|-------|-------------|
+| `agent` | Agent response chunks (streaming) |
+| `chat` | Chat session updates |
+| `presence` | System presence changes |
+| `health` | Health status updates |
+| `tick` | Gateway heartbeat (periodic) |
+| `heartbeat` | Client heartbeat (periodic) |
+| `talk.mode` | Voice mode changes |
+| `shutdown` | Gateway shutdown notification |
+| `cron` | Cron job status |
+| `node.pair.requested` | Device pairing request |
+| `node.pair.resolved` | Device pairing resolved |
+| `device.pair.requested` | Device pairing request |
+| `device.pair.resolved` | Device pairing resolved |
+| `voicewake.changed` | Voice wake triggers changed |
+| `exec.approval.requested` | Execution approval requested |
+| `exec.approval.resolved` | Execution approval resolved |
+| `update.available` | Software update available |
+
+See [Events](/api/events) for detailed event schemas.
+
+### Subscribing to Events
+
+Events are automatically sent to all connected clients. No explicit subscription is required for most events.
+
+For session-specific events, use session subscriptions:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "node.subscribe",
+  "params": {
+    "sessionKey": "session-key"
+  }
+}
+```
+
+## Common Methods
+
+### Invoke Agent
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "agent",
+  "params": {
+    "message": "Hello, agent!",
+    "sessionKey": "user:123",
+    "runId": "unique-run-id"
+  }
+}
+```
+
+See [Agent Protocol](/api/agent-protocol) for details.
+
+### Send Message
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "method": "send",
+  "params": {
+    "to": "+1234567890",
+    "message": "Hello!",
+    "channel": "signal",
+    "idempotencyKey": "unique-key"
+  }
+}
+```
+
+See [Messages](/api/messages) for details.
+
+### List Sessions
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "method": "sessions.list",
+  "params": {}
+}
+```
+
+See [Sessions](/api/sessions) for details.
+
+## Heartbeat
+
+The Gateway sends periodic `tick` events to keep connections alive:
+
+```json
+{
+  "event": "tick",
+  "payload": {
+    "timestamp": 1234567890000
+  }
+}
+```
+
+Clients should respond to heartbeats or implement connection keep-alive logic.
+
+## Connection Management
+
+### Reconnection
+
+If the WebSocket connection drops:
+
+1. Wait a short delay (exponential backoff recommended)
+2. Re-establish WebSocket connection
+3. Re-send `connect` method
+4. Resume operations
+
+### Graceful Shutdown
+
+The Gateway sends a `shutdown` event before closing:
+
+```json
+{
+  "event": "shutdown",
+  "payload": {
+    "reason": "Gateway is shutting down"
+  }
+}
+```
+
+Clients should close the connection and attempt reconnection after a delay.
+
+## Error Handling
+
+### Common Error Codes
+
+| Code | Description |
+|------|-------------|
+| `INVALID_REQUEST` | Request validation failed |
+| `UNAUTHORIZED` | Authentication failed |
+| `METHOD_NOT_FOUND` | Unknown RPC method |
+| `INTERNAL_ERROR` | Server error |
+| `RATE_LIMITED` | Rate limit exceeded |
+
+### Example Error Response
+
+```json
+{
+  "id": 10,
+  "ok": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Missing required parameter: message"
+  }
+}
+```
+
+## Example: Complete Flow
+
+```javascript
+const WebSocket = require('ws');
+
+const ws = new WebSocket('ws://localhost:18789');
+let requestId = 0;
+
+function sendRequest(method, params) {
+  const id = ++requestId;
+  ws.send(JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    method,
+    params
+  }));
+  return id;
+}
+
+ws.on('open', () => {
+  console.log('Connected');
+  
+  // Authenticate
+  sendRequest('connect', {
+    role: 'control',
+    auth: { token: 'your-token' },
+    client: { name: 'Example Client', version: '1.0.0' }
+  });
+});
+
+ws.on('message', (data) => {
+  const frame = JSON.parse(data);
+  
+  if (frame.event) {
+    // Handle event
+    console.log('Event:', frame.event, frame.payload);
+  } else if (frame.id === 1) {
+    // Connected
+    console.log('Authenticated:', frame.ok);
+    
+    // Invoke agent
+    sendRequest('agent', {
+      message: 'Hello, world!',
+      sessionKey: 'example:session',
+      runId: 'run-123'
+    });
+  } else if (frame.id === 2) {
+    // Agent response
+    console.log('Agent result:', frame.payload);
+  }
+});
+
+ws.on('close', () => {
+  console.log('Disconnected');
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agent Protocol" icon="robot" href="/api/agent-protocol">
+    Invoke agents via WebSocket
+  </Card>
+  <Card title="Events" icon="bell" href="/api/events">
+    Subscribe to Gateway events
+  </Card>
+  <Card title="Sessions" icon="list" href="/api/sessions">
+    Manage agent sessions
+  </Card>
+  <Card title="Messages" icon="message" href="/api/messages">
+    Send messages via channels
+  </Card>
+</CardGroup>

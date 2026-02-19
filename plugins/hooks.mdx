@@ -1,0 +1,535 @@
+---
+title: "Hooks"
+description: "Intercept and modify behavior with lifecycle hooks"
+---
+
+Hooks let you intercept and modify OpenClaw's behavior at key lifecycle points. Hooks are registered via the Plugin API and called synchronously or asynchronously depending on the event type.
+
+## Registering Hooks
+
+Use `api.registerHook` to register a hook handler:
+
+```typescript
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+
+const plugin = {
+  id: "my-plugin",
+  register(api: OpenClawPluginApi) {
+    api.registerHook("llm_input", async (event, ctx) => {
+      api.logger.info(`LLM call: ${event.provider}/${event.model}`);
+    });
+  }
+};
+
+export default plugin;
+```
+
+You can register multiple events at once:
+
+```typescript
+api.registerHook(["message_received", "message_sent"], async (event, ctx) => {
+  api.logger.info(`Message event: ${JSON.stringify(event)}`);
+});
+```
+
+## Available Hooks
+
+### Agent Lifecycle
+
+#### before_model_resolve
+
+Fired before resolving the model/provider for an agent run. Use this to override model selection based on the prompt.
+
+```typescript
+api.registerHook("before_model_resolve", async (event, ctx) => {
+  // event.prompt: string
+  // ctx: { agentId?, sessionKey?, workspaceDir?, messageProvider? }
+  
+  if (event.prompt.includes("image")) {
+    return {
+      modelOverride: "gpt-4-vision-preview",
+      providerOverride: "openai"
+    };
+  }
+});
+```
+
+**Event:** `{ prompt: string }`
+
+**Return:** `{ modelOverride?: string, providerOverride?: string }` or `void`
+
+#### before_prompt_build
+
+Fired before building the prompt for an agent run. Session messages are available at this point.
+
+```typescript
+api.registerHook("before_prompt_build", async (event, ctx) => {
+  // event.prompt: string
+  // event.messages: unknown[]
+  // ctx: { agentId?, sessionKey?, workspaceDir?, messageProvider? }
+  
+  return {
+    systemPrompt: "Custom system prompt",
+    prependContext: "Additional context"
+  };
+});
+```
+
+**Event:** `{ prompt: string, messages: unknown[] }`
+
+**Return:** `{ systemPrompt?: string, prependContext?: string }` or `void`
+
+#### before_agent_start (legacy)
+
+Fired before an agent run starts. Combines both `before_model_resolve` and `before_prompt_build` phases.
+
+```typescript
+api.registerHook("before_agent_start", async (event, ctx) => {
+  return {
+    modelOverride: "gpt-4",
+    systemPrompt: "Custom prompt"
+  };
+});
+```
+
+**Event:** `{ prompt: string, messages?: unknown[] }`
+
+**Return:** `{ modelOverride?: string, providerOverride?: string, systemPrompt?: string, prependContext?: string }` or `void`
+
+#### llm_input
+
+Fired before sending a prompt to the LLM. Use for logging, telemetry, or analytics.
+
+```typescript
+api.registerHook("llm_input", async (event, ctx) => {
+  api.logger.info(
+    `LLM call: ${event.provider}/${event.model}, ` +
+    `prompt length: ${event.prompt.length}, ` +
+    `history: ${event.historyMessages.length} messages`
+  );
+});
+```
+
+**Event:**
+```typescript
+{
+  runId: string;
+  sessionId: string;
+  provider: string;
+  model: string;
+  systemPrompt?: string;
+  prompt: string;
+  historyMessages: unknown[];
+  imagesCount: number;
+}
+```
+
+#### llm_output
+
+Fired after receiving a response from the LLM.
+
+```typescript
+api.registerHook("llm_output", async (event, ctx) => {
+  api.logger.info(
+    `LLM response: ${event.assistantTexts.length} messages, ` +
+    `tokens: ${event.usage?.total ?? 0}`
+  );
+});
+```
+
+**Event:**
+```typescript
+{
+  runId: string;
+  sessionId: string;
+  provider: string;
+  model: string;
+  assistantTexts: string[];
+  lastAssistant?: unknown;
+  usage?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+    total?: number;
+  };
+}
+```
+
+#### agent_end
+
+Fired after an agent run completes (success or failure).
+
+```typescript
+api.registerHook("agent_end", async (event, ctx) => {
+  api.logger.info(
+    `Agent run ${event.success ? "succeeded" : "failed"}, ` +
+    `duration: ${event.durationMs}ms`
+  );
+});
+```
+
+**Event:**
+```typescript
+{
+  messages: unknown[];
+  success: boolean;
+  error?: string;
+  durationMs?: number;
+}
+```
+
+### Session Management
+
+#### session_start
+
+Fired when a new session starts.
+
+```typescript
+api.registerHook("session_start", async (event, ctx) => {
+  api.logger.info(`Session started: ${event.sessionId}`);
+});
+```
+
+**Event:** `{ sessionId: string, resumedFrom?: string }`
+
+#### session_end
+
+Fired when a session ends.
+
+```typescript
+api.registerHook("session_end", async (event, ctx) => {
+  api.logger.info(
+    `Session ended: ${event.sessionId}, ` +
+    `${event.messageCount} messages, ` +
+    `duration: ${event.durationMs}ms`
+  );
+});
+```
+
+**Event:** `{ sessionId: string, messageCount: number, durationMs?: number }`
+
+#### before_compaction
+
+Fired before session compaction (history summarization). Useful for archiving session history.
+
+```typescript
+api.registerHook("before_compaction", async (event, ctx) => {
+  api.logger.info(
+    `Compacting ${event.compactingCount} messages, ` +
+    `total: ${event.messageCount}`
+  );
+  
+  // Read full session history from disk if needed
+  if (event.sessionFile) {
+    const fs = await import("node:fs/promises");
+    const lines = await fs.readFile(event.sessionFile, "utf-8");
+    // Process lines...
+  }
+});
+```
+
+**Event:**
+```typescript
+{
+  messageCount: number;
+  compactingCount?: number;
+  tokenCount?: number;
+  messages?: unknown[];
+  sessionFile?: string;
+}
+```
+
+#### after_compaction
+
+Fired after session compaction completes.
+
+```typescript
+api.registerHook("after_compaction", async (event, ctx) => {
+  api.logger.info(
+    `Compaction complete: ${event.compactedCount} messages kept`
+  );
+});
+```
+
+**Event:** `{ messageCount: number, tokenCount?: number, compactedCount: number, sessionFile?: string }`
+
+#### before_reset
+
+Fired when a session is reset (`/new`, `/reset` commands).
+
+```typescript
+api.registerHook("before_reset", async (event, ctx) => {
+  api.logger.info(`Session reset: ${event.reason ?? "unknown"}`);
+});
+```
+
+**Event:** `{ sessionFile?: string, messages?: unknown[], reason?: string }`
+
+### Message Flow
+
+#### message_received
+
+Fired when a message is received from a channel.
+
+```typescript
+api.registerHook("message_received", async (event, ctx) => {
+  api.logger.info(
+    `Message from ${event.from}: ${event.content.slice(0, 50)}`
+  );
+});
+```
+
+**Event:** `{ from: string, content: string, timestamp?: number, metadata?: Record<string, unknown> }`
+
+**Context:** `{ channelId: string, accountId?: string, conversationId?: string }`
+
+#### message_sending
+
+Fired before sending a message to a channel. Can modify or cancel the message.
+
+```typescript
+api.registerHook("message_sending", async (event, ctx) => {
+  // Filter profanity
+  const filtered = event.content.replace(/badword/gi, "***");
+  return { content: filtered };
+});
+```
+
+**Event:** `{ to: string, content: string, metadata?: Record<string, unknown> }`
+
+**Return:** `{ content?: string, cancel?: boolean }` or `void`
+
+**Context:** `{ channelId: string, accountId?: string, conversationId?: string }`
+
+#### message_sent
+
+Fired after a message is sent to a channel.
+
+```typescript
+api.registerHook("message_sent", async (event, ctx) => {
+  if (event.success) {
+    api.logger.info(`Message sent to ${event.to}`);
+  } else {
+    api.logger.error(`Failed to send: ${event.error}`);
+  }
+});
+```
+
+**Event:** `{ to: string, content: string, success: boolean, error?: string }`
+
+**Context:** `{ channelId: string, accountId?: string, conversationId?: string }`
+
+### Tool Execution
+
+#### before_tool_call
+
+Fired before a tool is called. Can modify parameters or block the call.
+
+```typescript
+api.registerHook("before_tool_call", async (event, ctx) => {
+  if (event.toolName === "delete_file" && !event.params.confirmed) {
+    return {
+      block: true,
+      blockReason: "Destructive operation requires confirmation"
+    };
+  }
+});
+```
+
+**Event:** `{ toolName: string, params: Record<string, unknown> }`
+
+**Return:** `{ params?: Record<string, unknown>, block?: boolean, blockReason?: string }` or `void`
+
+**Context:** `{ agentId?: string, sessionKey?: string, toolName: string }`
+
+#### after_tool_call
+
+Fired after a tool completes.
+
+```typescript
+api.registerHook("after_tool_call", async (event, ctx) => {
+  api.logger.info(
+    `Tool ${event.toolName} ${event.error ? "failed" : "succeeded"}, ` +
+    `duration: ${event.durationMs}ms`
+  );
+});
+```
+
+**Event:** `{ toolName: string, params: Record<string, unknown>, result?: unknown, error?: string, durationMs?: number }`
+
+**Context:** `{ agentId?: string, sessionKey?: string, toolName: string }`
+
+#### tool_result_persist
+
+Fired before writing a tool result to the session transcript. Can modify or drop the message.
+
+```typescript
+api.registerHook("tool_result_persist", (event, ctx) => {
+  // Strip large responses to save space
+  if (event.message.content?.length > 10000) {
+    return {
+      message: {
+        ...event.message,
+        content: event.message.content.slice(0, 1000) + "... (truncated)"
+      }
+    };
+  }
+});
+```
+
+**Event:** `{ toolName?: string, toolCallId?: string, message: AgentMessage, isSynthetic?: boolean }`
+
+**Return:** `{ message?: AgentMessage }` or `void`
+
+#### before_message_write
+
+Fired before writing any message to the session transcript. Can block the write.
+
+```typescript
+api.registerHook("before_message_write", (event, ctx) => {
+  // Don't persist system messages
+  if (event.message.role === "system") {
+    return { block: true };
+  }
+});
+```
+
+**Event:** `{ message: AgentMessage, sessionKey?: string, agentId?: string }`
+
+**Return:** `{ block?: boolean, message?: AgentMessage }` or `void`
+
+### Gateway Lifecycle
+
+#### gateway_start
+
+Fired when the gateway starts.
+
+```typescript
+api.registerHook("gateway_start", async (event, ctx) => {
+  api.logger.info(`Gateway started on port ${event.port}`);
+});
+```
+
+**Event:** `{ port: number }`
+
+**Context:** `{ port?: number }`
+
+#### gateway_stop
+
+Fired when the gateway stops.
+
+```typescript
+api.registerHook("gateway_stop", async (event, ctx) => {
+  api.logger.info(`Gateway stopped: ${event.reason ?? "unknown"}`);
+});
+```
+
+**Event:** `{ reason?: string }`
+
+**Context:** `{ port?: number }`
+
+## Hook Files (Advanced)
+
+OpenClaw also supports hook files with frontmatter metadata. These are typically used for bundled hooks in `src/hooks/bundled/`.
+
+Hook directory structure:
+```
+hooks/
+  my-hook/
+    HOOK.md
+    handler.ts
+```
+
+`HOOK.md`:
+```markdown
+---
+events:
+  - llm_input
+  - llm_output
+---
+
+# My Hook
+
+Description of what this hook does.
+```
+
+`handler.ts`:
+```typescript
+import type { InternalHookEvent, InternalHookContext } from "openclaw/plugin-sdk";
+
+export default async function handler(event: InternalHookEvent, ctx: InternalHookContext) {
+  // Handle event
+}
+```
+
+Plugins can register hook directories:
+
+```typescript
+import { registerPluginHooksFromDir } from "openclaw/plugin-sdk";
+
+register(api: OpenClawPluginApi) {
+  await registerPluginHooksFromDir(api, "./hooks");
+}
+```
+
+See `src/hooks/plugin-hooks.ts` for details.
+
+## Example: Session Logger
+
+```typescript
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { writeFile } from "node:fs/promises";
+
+const plugin = {
+  id: "session-logger",
+  register(api: OpenClawPluginApi) {
+    const sessionLog = new Map<string, any>();
+
+    api.registerHook("session_start", async (event) => {
+      sessionLog.set(event.sessionId, {
+        startTime: Date.now(),
+        llmCalls: 0,
+        toolCalls: 0
+      });
+    });
+
+    api.registerHook("llm_input", async (event) => {
+      const log = sessionLog.get(event.sessionId);
+      if (log) log.llmCalls++;
+    });
+
+    api.registerHook("after_tool_call", async (event, ctx) => {
+      const sessionId = ctx.sessionKey;
+      const log = sessionId && sessionLog.get(sessionId);
+      if (log) log.toolCalls++;
+    });
+
+    api.registerHook("session_end", async (event) => {
+      const log = sessionLog.get(event.sessionId);
+      if (log) {
+        const report = {
+          sessionId: event.sessionId,
+          duration: Date.now() - log.startTime,
+          messageCount: event.messageCount,
+          llmCalls: log.llmCalls,
+          toolCalls: log.toolCalls
+        };
+        await writeFile(
+          `/tmp/session-${event.sessionId}.json`,
+          JSON.stringify(report, null, 2)
+        );
+        sessionLog.delete(event.sessionId);
+      }
+    });
+  }
+};
+
+export default plugin;
+```
+
+## Next Steps
+
+- [Tools](/plugins/tools) - Build custom agent tools
+- [Channels](/plugins/channels) - Create channel integrations
+- [Examples](/plugins/examples) - Real-world plugin examples

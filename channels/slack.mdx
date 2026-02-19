@@ -1,0 +1,464 @@
+---
+title: Slack Channel
+description: Connect OpenClaw to Slack using Socket Mode with bot and app tokens
+---
+
+Slack integration with OpenClaw uses **Socket Mode**, which provides a WebSocket connection for receiving events without exposing a public HTTP endpoint. You'll need both a **bot token** (xoxb-...) and an **app-level token** (xapp-...).
+
+## Quick Start
+
+The fastest way to set up Slack is with the interactive onboarding:
+
+```bash
+openclaw init
+```
+
+Select Slack and follow the prompts to enter your tokens.
+
+## Creating a Slack App
+
+<Steps>
+  <Step title="Create a new app">
+    1. Go to [Slack API: Your Apps](https://api.slack.com/apps)
+    2. Click "Create New App"
+    3. Choose "From scratch"
+    4. Give your app a name (e.g., "OpenClaw Bot")
+    5. Select the workspace where you want to install it
+    6. Click "Create App"
+  </Step>
+
+  <Step title="Enable Socket Mode">
+    1. In the left sidebar, click "Socket Mode"
+    2. Toggle "Enable Socket Mode" on
+    3. Give your token a name (e.g., "OpenClaw Socket")
+    4. Click "Generate"
+    5. Copy the **app-level token** (starts with `xapp-`)
+    6. Save this token - you'll need it later
+  </Step>
+
+  <Step title="Configure OAuth scopes">
+    1. Go to "OAuth & Permissions" in the sidebar
+    2. Scroll to "Scopes" → "Bot Token Scopes"
+    3. Add these scopes:
+       - `chat:write` - Send messages
+       - `channels:history` - Read public channel messages
+       - `channels:read` - View public channels
+       - `groups:history` - Read private channel messages
+       - `im:history` - Read DM messages
+       - `mpim:history` - Read multi-person DM messages
+       - `users:read` - View users
+       - `app_mentions:read` - Receive @mentions
+       - `reactions:read` - Read reactions
+       - `reactions:write` - Add reactions
+       - `files:read` - Read files
+       - `files:write` - Upload files
+       - `pins:read` - Read pinned messages
+       - `pins:write` - Pin messages
+       - `commands` - Use slash commands
+  </Step>
+
+  <Step title="Install app to workspace">
+    1. Go to "OAuth & Permissions"
+    2. Click "Install to Workspace" (or "Reinstall to Workspace" if you added new scopes)
+    3. Review permissions and click "Allow"
+    4. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
+    5. Save this token - you'll need it for configuration
+  </Step>
+
+  <Step title="Enable events (optional but recommended)">
+    1. Go to "Event Subscriptions" in the sidebar
+    2. Toggle "Enable Events" on
+    3. Under "Subscribe to bot events", add:
+       - `app_mention` - Bot @mentions
+       - `message.channels` - Public channel messages
+       - `message.groups` - Private channel messages
+       - `message.im` - Direct messages
+       - `message.mpim` - Multi-person DMs
+       - `reaction_added` - Reactions added
+       - `reaction_removed` - Reactions removed
+    4. Click "Save Changes"
+  </Step>
+
+  <Step title="Enable App Home (for DMs)">
+    1. Go to "App Home" in the sidebar
+    2. Under "Show Tabs", enable the "Messages Tab"
+    3. Check "Allow users to send Slash commands and messages from the messages tab"
+  </Step>
+</Steps>
+
+## Configuration
+
+### Using Environment Variables
+
+The simplest way to configure Slack:
+
+```bash
+export SLACK_BOT_TOKEN="xoxb-your-bot-token"
+export SLACK_APP_TOKEN="xapp-your-app-token"
+```
+
+Then enable in config:
+
+```json
+{
+  "channels": {
+    "slack": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### Using Config File
+
+Alternatively, store tokens directly in `openclaw.config.json`:
+
+```json
+{
+  "channels": {
+    "slack": {
+      "enabled": true,
+      "botToken": "xoxb-your-bot-token",
+      "appToken": "xapp-your-app-token",
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "channels": {}
+    }
+  }
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable Slack channel |
+| `botToken` | string | - | Bot OAuth token (xoxb-...) or use `SLACK_BOT_TOKEN` env var |
+| `appToken` | string | - | App-level token (xapp-...) or use `SLACK_APP_TOKEN` env var |
+| `dmPolicy` | string | `"pairing"` | DM access policy: `pairing`, `allowlist`, `open`, `disabled` |
+| `allowFrom` | string[] | `[]` | Slack user IDs allowed to DM (e.g., `["U123ABC456"]`) |
+| `groupPolicy` | string | `"allowlist"` | Channel access policy: `allowlist`, `open`, `disabled` |
+| `channels` | object | `{}` | Per-channel configuration (keys are channel IDs like `C123ABC456`) |
+
+### DM Policies
+
+- **`pairing`** (recommended): Unknown users get a pairing code; approve with `openclaw pairing approve slack <userId>`
+- **`allowlist`**: Only user IDs in `allowFrom` can DM the bot
+- **`open`**: Anyone can DM the bot (set `allowFrom: ["*"]`)
+- **`disabled`**: Ignore all Slack DMs
+
+### Getting Your Slack User ID
+
+**Method 1: Check profile**
+1. Click your profile picture in Slack
+2. Select "Profile"
+3. Click the three dots → "Copy member ID"
+
+**Method 2: Check logs**
+1. DM your bot in Slack
+2. Run `openclaw logs --follow`
+3. Look for a line like:
+   ```
+   Slack DM from user_id=U123ABC456 username=@yourname
+   ```
+
+**Method 3: Use Slack API**
+```bash
+curl -H "Authorization: Bearer xoxb-your-token" \
+  "https://slack.com/api/users.list" | jq '.members[] | select(.name=="yourname") | .id'
+```
+
+## Channel Configuration
+
+### Allowlist Specific Channels
+
+To restrict the bot to specific channels:
+
+```json
+{
+  "channels": {
+    "slack": {
+      "groupPolicy": "allowlist",
+      "channels": {
+        "C123ABC456": { "allow": true },
+        "C789DEF012": { "allow": true }
+      }
+    }
+  }
+}
+```
+
+To get channel IDs:
+1. Right-click the channel in Slack
+2. Select "View channel details"
+3. Scroll to the bottom - the ID is at the end
+
+Or use the Slack API:
+```bash
+curl -H "Authorization: Bearer xoxb-your-token" \
+  "https://slack.com/api/conversations.list" | jq '.channels[] | {name, id}'
+```
+
+### Per-Channel Settings
+
+```json
+{
+  "channels": {
+    "slack": {
+      "channels": {
+        "C123ABC456": {
+          "allow": true,
+          "requireMention": true,
+          "allowFrom": ["U123ABC456", "U789DEF012"],
+          "toolPolicy": "allowlist"
+        }
+      }
+    }
+  }
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `allow` | boolean | `false` | Enable bot in this channel |
+| `requireMention` | boolean | `false` | Only respond when bot is @mentioned |
+| `allowFrom` | string[] | `[]` | User IDs allowed to use the bot in this channel |
+| `toolPolicy` | string | `"open"` | Tool usage policy: `open`, `allowlist`, `disabled` |
+
+### Resolving Channel Names
+
+OpenClaw can resolve channel names to IDs:
+
+```bash
+openclaw channels resolve slack "#general"
+```
+
+## Slash Commands
+
+Slack slash commands let users trigger the bot with `/command`.
+
+### Creating a Slash Command
+
+1. Go to "Slash Commands" in your app settings
+2. Click "Create New Command"
+3. Set:
+   - **Command**: `/openclaw` (or any name)
+   - **Request URL**: Leave this for Socket Mode (not used)
+   - **Short Description**: "Talk to OpenClaw"
+   - **Usage Hint**: `[message]`
+4. Click "Save"
+
+OpenClaw will automatically handle the command.
+
+## Thread Support
+
+Slack threads are automatically detected and maintained. Messages in a thread will keep conversation context:
+
+```json
+{
+  "channels": {
+    "slack": {
+      "threads": {
+        "enabled": true
+      }
+    }
+  }
+}
+```
+
+## Interactive Components
+
+Slack supports buttons, select menus, and other interactive elements. OpenClaw can render these in responses:
+
+```json
+{
+  "channels": {
+    "slack": {
+      "interactiveComponents": {
+        "enabled": true
+      }
+    }
+  }
+}
+```
+
+## Multi-Account Support
+
+You can connect to multiple Slack workspaces:
+
+```json
+{
+  "channels": {
+    "slack": {
+      "accounts": {
+        "work": {
+          "enabled": true,
+          "botToken": "xoxb-work-token",
+          "appToken": "xapp-work-token",
+          "channels": {
+            "C123ABC456": { "allow": true }
+          }
+        },
+        "community": {
+          "enabled": true,
+          "botToken": "xoxb-community-token",
+          "appToken": "xapp-community-token",
+          "channels": {
+            "C789DEF012": { "allow": true }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Bot not responding to messages">
+    Check these common issues:
+
+    1. **Socket Mode is not enabled**
+       - Go to Slack API → Socket Mode → Toggle on
+
+    2. **Missing OAuth scopes**
+       - Verify all required scopes are added (see setup steps)
+       - Reinstall the app after adding scopes
+
+    3. **Channel not in allowlist**
+       - Check `channels` configuration includes the channel ID
+
+    4. **Bot not invited to channel**
+       - Type `/invite @BotName` in the channel
+
+    Verify status:
+
+    ```bash
+    openclaw channels status --probe
+    ```
+  </Accordion>
+
+  <Accordion title="Socket connection errors">
+    Socket Mode requires both tokens:
+    - **Bot token** (xoxb-...) - from "OAuth & Permissions"
+    - **App token** (xapp-...) - from "Socket Mode"
+
+    Verify both are configured:
+
+    ```bash
+    openclaw config get channels.slack.botToken
+    openclaw config get channels.slack.appToken
+    ```
+  </Accordion>
+
+  <Accordion title="Messages not appearing in logs">
+    Ensure Event Subscriptions are configured:
+    1. Go to "Event Subscriptions" in Slack API
+    2. Enable events
+    3. Subscribe to:
+       - `message.channels`
+       - `message.groups`
+       - `message.im`
+       - `app_mention`
+    4. Save and reinstall the app
+  </Accordion>
+
+  <Accordion title="Cannot send DMs to bot">
+    Enable the Messages tab in App Home:
+    1. Go to "App Home" in Slack API
+    2. Enable "Messages Tab"
+    3. Check "Allow users to send Slash commands and messages from the messages tab"
+  </Accordion>
+
+  <Accordion title="Invalid token error">
+    Check that your tokens are correct and not expired:
+    - Bot token starts with `xoxb-`
+    - App token starts with `xapp-`
+
+    If tokens are invalid, regenerate them in the Slack API portal.
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+- **Keep tokens secret** - they give full access to your bot and workspace
+- **Use environment variables** instead of committing tokens to version control
+- **Rotate tokens** if they may have been exposed
+- **Use allowlist mode** for production bots
+- **Review OAuth scopes** - only grant what's needed
+- **Monitor bot activity** via Slack's audit logs
+
+## App Manifest (Quick Setup)
+
+For quick setup, you can use this manifest when creating your app:
+
+```yaml
+display_information:
+  name: OpenClaw
+  description: OpenClaw AI assistant
+features:
+  bot_user:
+    display_name: OpenClaw
+    always_online: false
+  app_home:
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+  slash_commands:
+    - command: /openclaw
+      description: Send a message to OpenClaw
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - channels:history
+      - channels:read
+      - groups:history
+      - im:history
+      - mpim:history
+      - users:read
+      - app_mentions:read
+      - reactions:read
+      - reactions:write
+      - pins:read
+      - pins:write
+      - emoji:read
+      - commands
+      - files:read
+      - files:write
+settings:
+  socket_mode_enabled: true
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+      - message.im
+      - message.mpim
+      - reaction_added
+      - reaction_removed
+      - member_joined_channel
+      - member_left_channel
+      - channel_rename
+      - pin_added
+      - pin_removed
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Signal Setup" icon="signal" href="/channels/signal">
+    Set up Signal as another channel
+  </Card>
+  
+  <Card title="Pairing Guide" icon="qrcode" href="/channels/pairing">
+    Learn about pairing codes and approvals
+  </Card>
+  
+  <Card title="Configuration Reference" icon="gear" href="/configuration">
+    Full configuration options
+  </Card>
+  
+  <Card title="Multi-Channel" icon="network-wired" href="/channels/overview">
+    Using multiple channels together
+  </Card>
+</CardGroup>

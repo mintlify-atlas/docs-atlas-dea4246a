@@ -1,0 +1,477 @@
+---
+title: "openclaw doctor"
+description: "Health checks and quick fixes for the gateway and channels"
+---
+
+# openclaw doctor
+
+Diagnostic tool that checks system health and automatically repairs common issues.
+
+## Usage
+
+```bash
+openclaw doctor [options]
+```
+
+## Options
+
+<ParamField path="--fix" type="boolean">
+  Apply suggested fixes without prompting (non-interactive)
+</ParamField>
+
+<ParamField path="--non-interactive" type="boolean">
+  Run in non-interactive mode (equivalent to --fix)
+</ParamField>
+
+<ParamField path="--generate-gateway-token" type="boolean">
+  Automatically generate and configure gateway token if missing
+</ParamField>
+
+<ParamField path="--workspace-suggestions" type="boolean">
+  Show workspace improvement suggestions (default: true)
+</ParamField>
+
+## What Doctor Checks
+
+The doctor command performs comprehensive system diagnostics:
+
+### 1. Configuration
+
+- **Config file validity** - JSON5 syntax and schema validation
+- **Gateway configuration** - Mode, port, bind, auth settings
+- **Legacy config migration** - Detects and migrates deprecated settings
+- **Missing required fields** - Ensures all required config is present
+
+### 2. Authentication
+
+- **Gateway auth** - Token/password configuration
+- **Auth profiles** - Model provider credentials
+- **OAuth profiles** - Anthropic/OpenAI OAuth status
+- **Deprecated profiles** - Removes obsolete CLI auth profiles
+
+### 3. Gateway Health
+
+- **Reachability** - Can the gateway be reached?
+- **Service status** - Is the daemon installed and running?
+- **Port conflicts** - Is the port already in use?
+- **Daemon configuration** - Service configuration validity
+
+### 4. Channels
+
+- **Channel connectivity** - Are channels reachable?
+- **Token validity** - Are channel tokens configured correctly?
+- **Recent errors** - Checks channel logs for issues
+
+### 5. Workspace
+
+- **Directory existence** - Is the workspace accessible?
+- **Bootstrap files** - Are guide files present?
+- **Skills directory** - Is skills structure correct?
+- **Memory system** - Is memory search configured?
+
+### 6. System Integration
+
+- **systemd lingering** (Linux) - User session persistence
+- **LaunchAgent overrides** (macOS) - Environment conflicts
+- **Shell completion** - Command completion setup
+- **Path environment** - Is openclaw on PATH?
+
+### 7. State Integrity
+
+- **Session files** - Session store validity
+- **Lock files** - Stale lock detection and cleanup
+- **Legacy state** - Old data migration
+- **Backup suggestions** - Workspace backup reminders
+
+### 8. Security
+
+- **Auth warnings** - Insecure configurations
+- **Token exposure** - Tokens in env/logs
+- **Bind warnings** - Unsafe bind modes
+- **Sandbox scope** - Container security settings
+
+### 9. Updates
+
+- **Version check** - Is an update available?
+- **Update channel** - Current channel status
+- **UI protocol** - Frontend/backend version compatibility
+
+### 10. Docker/Sandbox
+
+- **Docker availability** - Is Docker installed?
+- **Sandbox images** - Are required images present?
+- **Image updates** - Are images up to date?
+
+## Automatic Repairs
+
+Doctor can automatically fix many issues:
+
+### Config Repairs
+
+- Migrate legacy configuration format
+- Generate missing gateway token
+- Fix gateway auth mode
+- Update deprecated settings
+- Repair malformed config
+
+### Auth Repairs
+
+- Remove deprecated auth profiles
+- Fix OAuth profile IDs
+- Clear invalid session overrides
+
+### Gateway Repairs
+
+- Repair daemon configuration
+- Fix service install issues
+- Regenerate gateway token
+
+### Workspace Repairs
+
+- Create missing directories
+- Install bootstrap files
+- Fix skills structure
+
+### System Repairs
+
+- Enable systemd lingering (Linux)
+- Install shell completion
+- Fix PATH configuration
+
+## Examples
+
+<CodeGroup>
+```bash Basic
+# Run diagnostics
+openclaw doctor
+
+# Apply all fixes automatically
+openclaw doctor --fix
+
+# Non-interactive mode
+openclaw doctor --non-interactive
+```
+
+```bash Specific Repairs
+# Generate gateway token
+openclaw doctor --generate-gateway-token
+
+# Skip workspace suggestions
+openclaw doctor --workspace-suggestions false
+```
+
+```bash Troubleshooting
+# Check why gateway won't start
+openclaw doctor
+# Look for gateway errors and port conflicts
+
+# Check channel issues
+openclaw doctor
+# Look for channel connectivity warnings
+
+# Check after update
+openclaw update
+openclaw doctor
+```
+</CodeGroup>
+
+## Output Format
+
+Doctor organizes findings into sections:
+
+```
+┌─ OpenClaw doctor
+│
+├─ ✓ Configuration
+│   Config valid: ~/.openclaw/config.json5
+│
+├─ ⚠ Gateway
+│   gateway.mode is unset
+│   Fix: run `openclaw configure` and set mode
+│
+├─ ✓ Auth Profiles
+│   2 profiles configured
+│
+├─ ✗ Gateway Health
+│   Gateway not reachable (timeout)
+│   Service status: not running
+│
+├─ ✓ Channels
+│   telegram: configured
+│   discord: configured
+│
+├─ ✓ Workspace
+│   Workspace: ~/openclaw-workspace
+│
+└─ Doctor complete.
+```
+
+### Status Indicators
+
+- **✓** (green) - Check passed
+- **⚠** (yellow) - Warning, may need attention
+- **✗** (red) - Error, requires action
+
+## Interactive Prompts
+
+When run interactively, doctor prompts for repairs:
+
+```
+⚠ Gateway auth token missing
+
+? Generate and configure a gateway token now? (Y/n)
+```
+
+Options:
+- **Y** - Apply the fix
+- **n** - Skip this fix
+- **Ctrl+C** - Exit doctor
+
+Use `--fix` to auto-accept all prompts.
+
+## Common Issues
+
+### Gateway Won't Start
+
+**Symptoms**:
+- `openclaw gateway start` fails
+- Gateway not reachable
+
+**Doctor checks**:
+1. Config validation
+2. Port conflicts (`lsof -i :18789`)
+3. Gateway auth configuration
+4. Daemon service status
+
+**Suggested fixes**:
+```bash
+openclaw doctor
+# Follow prompts to:
+# - Set gateway.mode=local
+# - Generate auth token
+# - Fix daemon config
+# - Repair port conflicts
+```
+
+### Channel Not Working
+
+**Symptoms**:
+- Messages not sending/receiving
+- Channel shows offline
+
+**Doctor checks**:
+1. Channel token validity
+2. Channel connectivity
+3. Recent channel errors
+4. Gateway health
+
+**Suggested fixes**:
+```bash
+openclaw doctor
+# Review channel warnings
+# Then:
+openclaw channels status --probe
+openclaw channels login --channel whatsapp
+```
+
+### Config Invalid
+
+**Symptoms**:
+- Commands fail with config errors
+- Gateway won't start
+
+**Doctor checks**:
+1. JSON5 syntax
+2. Schema validation
+3. Required fields
+4. Type checking
+
+**Suggested fixes**:
+```bash
+openclaw doctor --fix
+# Automatically repairs common config issues
+
+# Or manually:
+openclaw config get gateway
+openclaw configure
+```
+
+### After Update Issues
+
+**Symptoms**:
+- Commands fail after update
+- Config incompatible
+
+**Doctor checks**:
+1. Config schema version
+2. Legacy migrations
+3. UI protocol version
+4. Dependencies
+
+**Suggested fixes**:
+```bash
+openclaw doctor
+# Apply suggested migrations
+# Rebuild if needed:
+pnpm install
+pnpm build
+```
+
+### systemd Service Stops (Linux)
+
+**Symptoms**:
+- Gateway stops on logout
+- Service not persistent
+
+**Doctor checks**:
+1. User lingering status
+2. Service configuration
+
+**Suggested fixes**:
+```bash
+openclaw doctor
+# Prompts to enable lingering:
+sudo loginctl enable-linger $USER
+```
+
+## Exit Codes
+
+- **0** - Doctor completed successfully
+- **1** - Doctor found critical issues
+- **2** - Doctor encountered errors
+
+Use in scripts:
+
+```bash
+if openclaw doctor --non-interactive; then
+  echo "System healthy"
+else
+  echo "Issues detected"
+  exit 1
+fi
+```
+
+## Scheduling
+
+Run doctor periodically:
+
+### Cron
+
+```bash
+# Weekly health check
+0 2 * * 0 /usr/local/bin/openclaw doctor --non-interactive
+```
+
+### systemd Timer
+
+Create `~/.config/systemd/user/openclaw-doctor.timer`:
+
+```ini
+[Unit]
+Description=OpenClaw Doctor Health Check
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+And `~/.config/systemd/user/openclaw-doctor.service`:
+
+```ini
+[Unit]
+Description=OpenClaw Doctor
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/openclaw doctor --non-interactive
+```
+
+Enable:
+
+```bash
+systemctl --user enable openclaw-doctor.timer
+systemctl --user start openclaw-doctor.timer
+```
+
+## Logs
+
+Doctor operations are logged to:
+
+```
+~/.openclaw/logs/gateway.log
+```
+
+View doctor-specific logs:
+
+```bash
+openclaw logs --plain | grep doctor
+```
+
+## Migration Detection
+
+Doctor detects and migrates:
+
+- **Legacy session format** - Old session file structure
+- **Old agent state** - Pre-2026 agent configuration
+- **WhatsApp auth migration** - Auth directory changes
+- **Config schema updates** - Field renames/restructuring
+
+### Manual Migration
+
+If automatic migration fails:
+
+```bash
+# Backup first
+cp -r ~/.openclaw ~/.openclaw.backup
+
+# Run doctor with fixes
+openclaw doctor --fix
+
+# Check results
+openclaw status
+```
+
+## Security Warnings
+
+Doctor checks for security issues:
+
+### Auth Mode None
+
+```
+⚠ Gateway auth mode=none with bind=lan
+This exposes the gateway without authentication.
+Set gateway.auth.mode=token or gateway.auth.mode=password
+```
+
+### Token in Logs
+
+```
+⚠ Gateway token may be exposed in logs
+Consider rotating: openclaw config set gateway.auth.token newtoken
+```
+
+### Unsafe Bind
+
+```
+⚠ Gateway bind=lan without Tailscale or VPN
+Consider using bind=loopback or gateway.tailscale.mode=serve
+```
+
+## Best Practices
+
+1. **Run after install**: `openclaw onboard` then `openclaw doctor`
+2. **Run after updates**: `openclaw update` then `openclaw doctor`
+3. **Run before reporting issues**: Include doctor output in bug reports
+4. **Run periodically**: Weekly health checks recommended
+5. **Review warnings**: Don't ignore yellow warnings
+
+## Related Commands
+
+- [status](/cli/status) - Quick status overview
+- [gateway](/cli/gateway) - Gateway management
+- [channels](/cli/channels) - Channel management
+- [config](/cli/config) - Configuration management
+- [onboard](/cli/onboard) - Initial setup wizard

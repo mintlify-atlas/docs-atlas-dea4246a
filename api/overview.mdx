@@ -1,0 +1,152 @@
+---
+title: "API Overview"
+description: "Gateway API overview, endpoints, and authentication"
+---
+
+# Gateway API Overview
+
+The OpenClaw Gateway API provides programmatic access to agent interactions, session management, and real-time communication via WebSocket and REST endpoints.
+
+## Base URL
+
+The Gateway API runs on your local or remote OpenClaw instance:
+
+```
+http://localhost:18789
+```
+
+The default port is **18789**. You can configure this in your OpenClaw config:
+
+```yaml
+gateway:
+  port: 18789
+  bind: loopback  # or "all" for remote access
+```
+
+## API Transport
+
+OpenClaw Gateway supports two transport mechanisms:
+
+- **WebSocket** - Primary protocol for real-time bidirectional communication
+- **HTTP/REST** - Alternative endpoints for specific use cases (OpenAI compatibility, hooks, tools)
+
+## Authentication
+
+All API requests require authentication. See [Authentication](/api/authentication) for details.
+
+**Quick example:**
+
+```bash
+curl -X POST http://localhost:18789/api/endpoint \
+  -H "Authorization: Bearer your-token-here" \
+  -H "Content-Type: application/json" \
+  -d '{"method": "example"}'
+```
+
+## Rate Limits
+
+The Gateway implements rate limiting for authentication attempts to prevent brute-force attacks:
+
+- **Limit**: 20 failed authentication attempts per client
+- **Window**: 60 seconds
+- **Response**: `429 Too Many Requests` with `Retry-After` header
+
+## Available Endpoints
+
+### WebSocket Protocol
+
+- **Gateway WebSocket**: `ws://localhost:18789/` - Primary RPC protocol
+- **Canvas WebSocket**: `ws://localhost:18789/canvas/ws` - Canvas host communication
+
+See [WebSocket Protocol](/api/websocket) for details.
+
+### REST Endpoints
+
+- **OpenAI Compatibility**: `/v1/chat/completions` - OpenAI-compatible chat endpoint
+- **Hooks**: `/hooks/*` - Webhook endpoints for external integrations
+- **Tools Invoke**: `/api/tools/invoke` - HTTP-based tool invocation
+- **Slack Events**: `/api/slack/events` - Slack app event receiver
+- **Channels**: `/api/channels/*` - Channel-specific HTTP endpoints
+
+See [REST Endpoints](/api/rest-endpoints) for details.
+
+## Response Format
+
+### WebSocket Responses
+
+WebSocket responses follow the RPC frame format:
+
+```json
+{
+  "id": "request-id",
+  "ok": true,
+  "payload": { ... },
+  "error": null
+}
+```
+
+### HTTP Responses
+
+HTTP endpoints return standard JSON:
+
+```json
+{
+  "ok": true,
+  "data": { ... }
+}
+```
+
+Error responses:
+
+```json
+{
+  "error": {
+    "message": "Error description",
+    "type": "error_type",
+    "code": "ERROR_CODE"
+  }
+}
+```
+
+## Error Codes
+
+Common error codes:
+
+| Code | Description |
+|------|-------------|
+| `INVALID_REQUEST` | Request validation failed |
+| `UNAUTHORIZED` | Authentication failed |
+| `METHOD_NOT_FOUND` | Unknown RPC method |
+| `INTERNAL_ERROR` | Server error |
+| `RATE_LIMITED` | Rate limit exceeded |
+
+## WebSocket vs REST
+
+**Use WebSocket when:**
+- You need real-time bidirectional communication
+- Subscribing to events (agent responses, presence, health)
+- Invoking multiple RPC methods
+- Building interactive clients (CLI, mobile apps, web UI)
+
+**Use REST when:**
+- Integrating with external systems via webhooks
+- OpenAI-compatible API access
+- Simple one-off requests
+- Tool invocation from HTTP-based systems
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/api/authentication">
+    Learn about authentication methods
+  </Card>
+  <Card title="WebSocket Protocol" icon="plug" href="/api/websocket">
+    Connect via WebSocket
+  </Card>
+  <Card title="REST Endpoints" icon="code" href="/api/rest-endpoints">
+    Use HTTP endpoints
+  </Card>
+  <Card title="Agent Protocol" icon="robot" href="/api/agent-protocol">
+    Invoke agents via API
+  </Card>
+</CardGroup>

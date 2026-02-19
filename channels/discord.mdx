@@ -1,0 +1,445 @@
+---
+title: Discord Channel
+description: Connect OpenClaw to Discord with a bot token from the Discord Developer Portal
+---
+
+Discord provides a powerful bot API with support for guilds (servers), channels, threads, voice channels, rich embeds, reactions, and interactive components. OpenClaw integrates with Discord using a bot token from the Discord Developer Portal.
+
+## Quick Start
+
+The fastest way to set up Discord is with the interactive onboarding:
+
+```bash
+openclaw init
+```
+
+Select Discord and follow the prompts to enter your bot token.
+
+## Creating a Discord Bot
+
+<Steps>
+  <Step title="Create an application">
+    1. Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+    2. Click "New Application"
+    3. Give your application a name (e.g., "OpenClaw Bot")
+    4. Click "Create"
+  </Step>
+
+  <Step title="Create a bot user">
+    1. In the left sidebar, click "Bot"
+    2. Click "Add Bot" → "Yes, do it!"
+    3. Under "Token", click "Reset Token" and copy the token
+    4. Save this token securely - you'll need it for configuration
+  </Step>
+
+  <Step title="Enable required intents">
+    Discord bots need specific "intents" (permissions to receive events). Enable these under the "Bot" tab:
+
+    - **Message Content Intent** - Required to read message text
+    - **Server Members Intent** - Optional, for member-related events
+    - **Presence Intent** - Optional, for user status updates
+
+    <Warning>
+      **Message Content Intent** is required for OpenClaw to read messages. Without it, the bot will only see metadata.
+    </Warning>
+  </Step>
+
+  <Step title="Generate invite URL">
+    1. Go to "OAuth2" → "URL Generator"
+    2. Under "Scopes", select:
+       - `bot`
+       - `applications.commands` (if you want slash commands)
+    3. Under "Bot Permissions", select:
+       - `Read Messages/View Channels`
+       - `Send Messages`
+       - `Embed Links`
+       - `Attach Files`
+       - `Read Message History`
+       - `Add Reactions`
+       - `Use Slash Commands` (optional)
+    4. Copy the generated URL at the bottom
+  </Step>
+
+  <Step title="Invite bot to your server">
+    1. Open the URL from the previous step in your browser
+    2. Select the server you want to add the bot to
+    3. Click "Authorize"
+  </Step>
+</Steps>
+
+## Configuration
+
+### Using Environment Variables
+
+The simplest way to configure Discord:
+
+```bash
+export DISCORD_BOT_TOKEN="your-bot-token-here"
+```
+
+Then enable in config:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### Using Config File
+
+Alternatively, store the token directly in `openclaw.config.json`:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "enabled": true,
+      "token": "your-bot-token-here",
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "guilds": {}
+    }
+  }
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable Discord channel |
+| `token` | string | - | Bot token from Discord Developer Portal (or use `DISCORD_BOT_TOKEN` env var) |
+| `dmPolicy` | string | `"pairing"` | DM access policy: `pairing`, `allowlist`, `open`, `disabled` |
+| `allowFrom` | string[] | `[]` | Discord user IDs allowed to DM (e.g., `["123456789012345678"]`) |
+| `groupPolicy` | string | `"allowlist"` | Channel access policy: `allowlist`, `open`, `disabled` |
+| `guilds` | object | `{}` | Per-guild and per-channel configuration |
+
+### DM Policies
+
+- **`pairing`** (recommended): Unknown users get a pairing code; approve with `openclaw pairing approve discord <userId>`
+- **`allowlist`**: Only user IDs in `allowFrom` can DM the bot
+- **`open`**: Anyone can DM the bot (set `allowFrom: ["*"]`)
+- **`disabled`**: Ignore all Discord DMs
+
+### Getting Your Discord User ID
+
+<Steps>
+  <Step title="Enable Developer Mode">
+    In Discord: Settings → Advanced → Enable "Developer Mode"
+  </Step>
+
+  <Step title="Copy your user ID">
+    Right-click your username anywhere in Discord and select "Copy User ID"
+  </Step>
+</Steps>
+
+Alternatively, DM your bot and check the logs:
+
+```bash
+openclaw logs --follow
+```
+
+Look for a line like:
+
+```
+Discord DM from user_id=123456789012345678 username=yourname#1234
+```
+
+## Guild and Channel Configuration
+
+### Allowlist Specific Channels
+
+To restrict the bot to specific guilds and channels:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "groupPolicy": "allowlist",
+      "guilds": {
+        "123456789012345678": {
+          "channels": {
+            "987654321098765432": { "allow": true },
+            "111222333444555666": { "allow": true }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+To get guild and channel IDs:
+1. Enable Developer Mode in Discord
+2. Right-click the server icon → "Copy Server ID" (guild ID)
+3. Right-click a channel → "Copy Channel ID"
+
+### Allowlist Entire Guild
+
+To allow all channels in a guild:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "guilds": {
+        "123456789012345678": {}
+      }
+    }
+  }
+}
+```
+
+### Per-Channel Settings
+
+```json
+{
+  "channels": {
+    "discord": {
+      "guilds": {
+        "123456789012345678": {
+          "channels": {
+            "987654321098765432": {
+              "allow": true,
+              "requireMention": true,
+              "allowFrom": ["user-id-1", "user-id-2"],
+              "toolPolicy": "allowlist"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `allow` | boolean | `false` | Enable bot in this channel |
+| `requireMention` | boolean | `false` | Only respond when bot is @mentioned |
+| `allowFrom` | string[] | `[]` | User IDs allowed to use the bot in this channel |
+| `toolPolicy` | string | `"open"` | Tool usage policy: `open`, `allowlist`, `disabled` |
+
+### Resolving Channel Names
+
+OpenClaw can resolve channel names to IDs:
+
+```bash
+openclaw channels resolve discord "My Server/#general"
+```
+
+This will output the guild and channel IDs you can add to your config.
+
+## Thread Support
+
+Discord threads are automatically detected and maintained. Messages in a thread will keep conversation context:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "threads": {
+        "autoCreate": true,
+        "defaultName": "OpenClaw Chat"
+      }
+    }
+  }
+}
+```
+
+## Mention Handling
+
+By default, the bot responds to:
+- Direct @mentions: `@BotName hello`
+- Replies to bot messages
+- DMs (subject to `dmPolicy`)
+
+To require @mentions in specific channels, set `requireMention: true` in the channel config.
+
+## Rich Embeds
+
+Discord supports rich embeds (formatted messages with colors, images, fields). OpenClaw automatically renders supported content as embeds.
+
+## Reactions
+
+Discord supports emoji reactions. The bot can:
+- React to messages
+- Receive reaction events
+- Use custom server emojis (if available)
+
+```json
+{
+  "channels": {
+    "discord": {
+      "reactions": {
+        "enabled": true
+      }
+    }
+  }
+}
+```
+
+## Multi-Account Support
+
+You can run multiple Discord bots:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "accounts": {
+        "main": {
+          "enabled": true,
+          "token": "main-bot-token",
+          "guilds": {
+            "guild-id-1": {}
+          }
+        },
+        "test": {
+          "enabled": true,
+          "token": "test-bot-token",
+          "guilds": {
+            "guild-id-2": {}
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Bot not responding to messages">
+    Check these common issues:
+
+    1. **Message Content Intent is disabled**
+       - Go to Discord Developer Portal → Bot → Enable "Message Content Intent"
+
+    2. **Bot lacks permissions in the channel**
+       - Ensure bot role has "Read Messages" and "Send Messages" permissions
+
+    3. **Channel not in allowlist**
+       - Check `guilds` configuration includes the channel ID
+
+    4. **User not in allowFrom**
+       - Add your user ID to `allowFrom` or use `dmPolicy: "pairing"`
+
+    Verify status:
+
+    ```bash
+    openclaw channels status --probe
+    ```
+  </Accordion>
+
+  <Accordion title="Websocket connection errors">
+    Discord uses WebSocket Gateway for real-time events. Connection errors usually mean:
+
+    - Invalid bot token
+    - Network/firewall blocking WebSocket connections
+    - Discord API outage (check [Discord Status](https://discordstatus.com))
+
+    Check logs:
+
+    ```bash
+    openclaw logs --follow | grep discord
+    ```
+  </Accordion>
+
+  <Accordion title="Bot can't see message content">
+    This is almost always due to **Message Content Intent** being disabled.
+
+    1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+    2. Select your application
+    3. Go to "Bot" tab
+    4. Scroll to "Privileged Gateway Intents"
+    5. Enable "Message Content Intent"
+    6. Save changes
+    7. Restart OpenClaw
+  </Accordion>
+
+  <Accordion title="Invalid token error">
+    Double-check your bot token. It should be a long alphanumeric string.
+
+    If you suspect the token is compromised:
+    1. Go to Discord Developer Portal → Bot
+    2. Click "Reset Token"
+    3. Update your config with the new token
+  </Accordion>
+
+  <Accordion title="Bot immediately leaves voice channels">
+    Voice channel support requires additional dependencies and configuration. See the [voice channels documentation](#) for setup.
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+- **Keep your bot token secret** - it gives full control of your bot
+- **Use environment variables** instead of committing tokens to version control
+- **Rotate tokens** if they may have been exposed
+- **Use allowlist mode** for production bots
+- **Limit bot permissions** to only what's needed
+- **Monitor bot activity** via logs and Discord's audit log
+
+## Advanced Configuration
+
+### Proxy Support
+
+If you need to route Discord traffic through a proxy:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "proxy": {
+        "host": "proxy.example.com",
+        "port": 8080,
+        "auth": {
+          "username": "user",
+          "password": "pass"
+        }
+      }
+    }
+  }
+}
+```
+
+### Rate Limiting
+
+Discord enforces rate limits. OpenClaw automatically handles rate limiting, but you can configure retry behavior:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "rateLimit": {
+        "maxRetries": 3,
+        "retryDelay": 1000
+      }
+    }
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Slack Setup" icon="slack" href="/channels/slack">
+    Set up Slack as another channel
+  </Card>
+  
+  <Card title="Pairing Guide" icon="qrcode" href="/channels/pairing">
+    Learn about pairing codes and approvals
+  </Card>
+  
+  <Card title="Configuration Reference" icon="gear" href="/configuration">
+    Full configuration options
+  </Card>
+  
+  <Card title="Multi-Channel" icon="network-wired" href="/channels/overview">
+    Using multiple channels together
+  </Card>
+</CardGroup>

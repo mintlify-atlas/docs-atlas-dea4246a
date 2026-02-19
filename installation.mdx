@@ -1,0 +1,468 @@
+---
+title: "Installation"
+description: "Detailed installation instructions for OpenClaw on macOS, Linux, and Windows"
+---
+
+# Installation
+
+OpenClaw can be installed globally via npm, built from source, or run with Docker. This guide covers all installation methods and platform-specific notes.
+
+## System Requirements
+
+<CardGroup cols={2}>
+  <Card title="Runtime" icon="server">
+    **Node.js ≥ 22.12.0** (LTS recommended)
+  </Card>
+  <Card title="Package Manager" icon="box">
+    npm, pnpm, or bun
+  </Card>
+  <Card title="Operating System" icon="desktop">
+    macOS, Linux, or Windows (WSL2)
+  </Card>
+  <Card title="AI Provider" icon="brain">
+    Anthropic or OpenAI subscription
+  </Card>
+</CardGroup>
+
+<Warning>
+Windows users must use **WSL2** (Windows Subsystem for Linux). Native Windows support is not available.
+</Warning>
+
+## Global Installation (Recommended)
+
+Install OpenClaw globally for easy access from anywhere:
+
+<CodeGroup>
+```bash npm
+npm install -g openclaw@latest
+```
+
+```bash pnpm
+pnpm add -g openclaw@latest
+```
+
+```bash bun
+bun add -g openclaw@latest
+```
+</CodeGroup>
+
+### Verify Installation
+
+```bash
+# Check version
+oclaw --version
+
+# Run diagnostics
+oclaw doctor
+```
+
+## Platform-Specific Setup
+
+### macOS
+
+On macOS, OpenClaw can run as a menu bar app or as a daemon service.
+
+<Steps>
+  <Step title="Install OpenClaw">
+    ```bash
+    npm install -g openclaw@latest
+    ```
+  </Step>
+
+  <Step title="Install the daemon">
+    ```bash
+    openclaw onboard --install-daemon
+    ```
+
+    This creates a launchd service that starts automatically on login.
+  </Step>
+
+  <Step title="Optional: Install macOS app">
+    Download the macOS app from the [releases page](https://github.com/openclaw/openclaw/releases) for menu bar control, Voice Wake, and Canvas support.
+  </Step>
+</Steps>
+
+<Note>
+The macOS app requires signed builds for TCC permissions (camera, microphone, screen recording) to persist across updates.
+</Note>
+
+### Linux
+
+Linux installation uses systemd for the daemon service.
+
+<Steps>
+  <Step title="Install Node.js 22+">
+    Using nvm:
+
+    ```bash
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+    nvm install 22
+    nvm use 22
+    ```
+
+    Or using your package manager:
+
+    ```bash
+    # Ubuntu/Debian
+    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+
+    # Fedora
+    sudo dnf install nodejs
+
+    # Arch
+    sudo pacman -S nodejs npm
+    ```
+  </Step>
+
+  <Step title="Install OpenClaw">
+    ```bash
+    npm install -g openclaw@latest
+    ```
+  </Step>
+
+  <Step title="Install systemd service">
+    ```bash
+    openclaw onboard --install-daemon
+    ```
+
+    This creates a systemd user service at `~/.config/systemd/user/openclaw-gateway.service`.
+  </Step>
+
+  <Step title="Manage the service">
+    ```bash
+    # Start
+    systemctl --user start openclaw-gateway
+
+    # Stop
+    systemctl --user stop openclaw-gateway
+
+    # Status
+    systemctl --user status openclaw-gateway
+
+    # Enable auto-start
+    systemctl --user enable openclaw-gateway
+    ```
+  </Step>
+</Steps>
+
+### Windows (WSL2)
+
+Windows users must use WSL2. Native Windows is not supported.
+
+<Steps>
+  <Step title="Install WSL2">
+    Open PowerShell as Administrator and run:
+
+    ```powershell
+    wsl --install -d Ubuntu
+    ```
+
+    Restart your computer when prompted.
+  </Step>
+
+  <Step title="Open Ubuntu terminal">
+    Launch Ubuntu from the Start menu.
+  </Step>
+
+  <Step title="Install Node.js 22+">
+    ```bash
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+    source ~/.bashrc
+    nvm install 22
+    nvm use 22
+    ```
+  </Step>
+
+  <Step title="Install OpenClaw">
+    ```bash
+    npm install -g openclaw@latest
+    openclaw onboard --install-daemon
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+WSL2 networking allows you to access the Gateway from Windows browsers at `http://127.0.0.1:18789`.
+</Tip>
+
+## Installation from Source
+
+For development or customization, build OpenClaw from source.
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/openclaw/openclaw.git
+    cd openclaw
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    pnpm install
+    ```
+
+    <Info>
+    Source builds require pnpm. Bun can also be used for running TypeScript directly.
+    </Info>
+  </Step>
+
+  <Step title="Build the UI and core">
+    ```bash
+    pnpm ui:build
+    pnpm build
+    ```
+  </Step>
+
+  <Step title="Run the onboarding wizard">
+    ```bash
+    pnpm openclaw onboard --install-daemon
+    ```
+  </Step>
+
+  <Step title="Development mode">
+    For auto-reload on code changes:
+
+    ```bash
+    pnpm gateway:watch
+    ```
+  </Step>
+</Steps>
+
+### Build Commands
+
+```bash
+# Type-check and build
+pnpm build
+
+# Type-check only
+pnpm tsgo
+
+# Lint and format
+pnpm check
+
+# Run tests
+pnpm test
+
+# Run with coverage
+pnpm test:coverage
+```
+
+## Docker Installation
+
+Run OpenClaw in a Docker container for isolated deployment.
+
+### Using Docker Compose
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+
+services:
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw-gateway
+    restart: unless-stopped
+    ports:
+      - "18789:18789"
+    volumes:
+      - ./openclaw-data:/root/.openclaw
+    environment:
+      - OPENCLAW_GATEWAY_TOKEN=your-secure-token-here
+      - OPENCLAW_GATEWAY_PASSWORD=your-password-here
+    command: ["node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan"]
+```
+
+Start the container:
+
+```bash
+docker-compose up -d
+```
+
+### Building from Dockerfile
+
+The Dockerfile in the repository supports custom builds:
+
+```bash
+# Build with browser support (adds ~300MB but pre-installs Chromium)
+docker build --build-arg OPENCLAW_INSTALL_BROWSER=1 -t openclaw:custom .
+
+# Build with additional packages
+docker build --build-arg OPENCLAW_DOCKER_APT_PACKAGES="git curl" -t openclaw:custom .
+```
+
+<Warning>
+Docker containers bind to localhost by default. Use `--bind lan` to allow external connections, but ensure you set authentication tokens.
+</Warning>
+
+### Docker Configuration
+
+Mount your configuration file:
+
+```bash
+docker run -d \
+  -p 18789:18789 \
+  -v ~/.openclaw:/root/.openclaw \
+  -e OPENCLAW_GATEWAY_TOKEN=your-token \
+  ghcr.io/openclaw/openclaw:latest
+```
+
+See the [Docker guide](/guides/docker) for detailed configuration options.
+
+## Configuration
+
+After installation, configure OpenClaw:
+
+### Using the Wizard
+
+```bash
+oclaw onboard
+```
+
+The wizard will guide you through:
+1. AI model selection (Anthropic or OpenAI)
+2. Gateway configuration
+3. Channel setup (WhatsApp, Telegram, etc.)
+4. Security settings
+
+### Manual Configuration
+
+Edit `~/.openclaw/openclaw.json`:
+
+```json
+{
+  "agent": {
+    "model": "anthropic/claude-opus-4-6"
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "your-secure-token-here"
+    }
+  },
+  "channels": {
+    "telegram": {
+      "botToken": "YOUR_BOT_TOKEN"
+    }
+  }
+}
+```
+
+See the [configuration guide](/configuration) for all options.
+
+## Updating OpenClaw
+
+### Global Installation
+
+```bash
+# Update to latest stable
+npm update -g openclaw
+
+# Update to specific version
+npm install -g openclaw@2026.2.19
+
+# Switch to beta channel
+npm install -g openclaw@beta
+```
+
+### Source Installation
+
+```bash
+cd openclaw
+git pull --rebase origin main
+pnpm install
+pnpm build
+```
+
+### After Updating
+
+Run diagnostics and migrations:
+
+```bash
+oclaw doctor
+```
+
+See the [updating guide](https://docs.openclaw.ai/install/updating) for detailed upgrade instructions.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Command not found: openclaw">
+    The OpenClaw binary is not in your PATH. 
+
+    For npm global installs, ensure `npm prefix -g` is in your PATH:
+
+    ```bash
+    # Add to ~/.bashrc or ~/.zshrc
+    export PATH="$(npm prefix -g)/bin:$PATH"
+    ```
+
+    For pnpm, add the pnpm global bin directory:
+
+    ```bash
+    # macOS
+    export PATH="$HOME/Library/pnpm:$PATH"
+
+    # Linux
+    export PATH="$HOME/.local/share/pnpm:$PATH"
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied errors">
+    Don't use sudo with global npm install. Fix permissions:
+
+    ```bash
+    mkdir -p ~/.npm-global
+    npm config set prefix '~/.npm-global'
+    export PATH=~/.npm-global/bin:$PATH
+    ```
+
+    Then reinstall OpenClaw:
+
+    ```bash
+    npm install -g openclaw
+    ```
+  </Accordion>
+
+  <Accordion title="Node version too old">
+    OpenClaw requires Node.js ≥ 22.12.0. Install via nvm:
+
+    ```bash
+    nvm install 22
+    nvm use 22
+    nvm alias default 22
+    ```
+  </Accordion>
+
+  <Accordion title="pnpm build fails">
+    Clear caches and reinstall:
+
+    ```bash
+    pnpm store prune
+    rm -rf node_modules
+    pnpm install
+    pnpm build
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure OpenClaw" icon="gear" href="/configuration">
+    Set up your AI model, channels, and security settings
+  </Card>
+  <Card title="Connect Channels" icon="plug" href="/channels/overview">
+    Add WhatsApp, Telegram, Discord, and more
+  </Card>
+  <Card title="Deploy to Production" icon="server" href="/guides/deployment">
+    Run OpenClaw on a VPS or cloud instance
+  </Card>
+  <Card title="Platform Apps" icon="mobile" href="/platforms/macos">
+    Install the macOS app or mobile nodes
+  </Card>
+</CardGroup>

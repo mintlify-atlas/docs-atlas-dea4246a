@@ -1,0 +1,555 @@
+---
+title: "Tools"
+description: "Add custom agent tools to extend AI capabilities"
+---
+
+Tools are functions that the LLM can call during agent runs. OpenClaw plugins can register custom tools to extend agent capabilities with domain-specific actions, integrations, and workflows.
+
+## Tool Structure
+
+A tool has three core components:
+
+1. **name** - Unique identifier (e.g., `"send_email"`, `"create_ticket"`)
+2. **description** - Natural language description of what the tool does
+3. **input** - TypeBox schema defining expected parameters
+4. **execute** - Async function that performs the action
+
+```typescript
+import type { AnyAgentTool } from "openclaw/plugin-sdk";
+import { Type } from "@sinclair/typebox";
+
+const myTool: AnyAgentTool = {
+  name: "greet",
+  description: "Generate a personalized greeting",
+  input: Type.Object({
+    name: Type.String({ description: "Name to greet" }),
+    style: Type.Optional(
+      Type.Union([Type.Literal("formal"), Type.Literal("casual")])
+    )
+  }),
+  execute: async (args) => {
+    const { name, style = "casual" } = args;
+    const greeting =
+      style === "formal"
+        ? `Good day, ${name}. How may I assist you?`
+        : `Hey ${name}! What's up?`;
+    return {
+      result: "success",
+      details: { greeting }
+    };
+  }
+};
+```
+
+## Registering Tools
+
+Register tools via the Plugin API:
+
+```typescript
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+
+const plugin = {
+  id: "greetings",
+  register(api: OpenClawPluginApi) {
+    api.registerTool(myTool);
+  }
+};
+
+export default plugin;
+```
+
+### Tool Options
+
+<ResponseField name="optional" type="boolean" default={false}>
+  Mark the tool as optional, requiring explicit allowlisting in agent config.
+
+  ```typescript
+  api.registerTool(myTool, { optional: true });
+  ```
+
+  Then allowlist in `config.json`:
+  ```json
+  {
+    "agents": {
+      "list": [
+        { "id": "main", "tools": { "allow": ["greet"] } }
+      ]
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="name" type="string" optional>
+  Override the tool name (useful for tool factories).
+
+  ```typescript
+  api.registerTool(myTool, { name: "custom_name" });
+  ```
+</ResponseField>
+
+<ResponseField name="names" type="string[]" optional>
+  Register multiple names for the same tool (for tool factories that generate multiple tools).
+
+  ```typescript
+  api.registerTool(toolFactory, { names: ["tool1", "tool2"] });
+  ```
+</ResponseField>
+
+## TypeBox Schemas
+
+OpenClaw uses [@sinclair/typebox](https://github.com/sinclairzx81/typebox) for tool input schemas. TypeBox generates JSON Schema and provides TypeScript type inference.
+
+### Basic Types
+
+```typescript
+import { Type } from "@sinclair/typebox";
+
+// String
+Type.String({ description: "A text value" })
+
+// Number
+Type.Number({ description: "A numeric value", minimum: 0, maximum: 100 })
+
+// Integer
+Type.Integer({ description: "An integer value" })
+
+// Boolean
+Type.Boolean({ description: "True or false" })
+
+// Optional field
+Type.Optional(Type.String({ description: "Optional text" }))
+```
+
+### Arrays
+
+```typescript
+// Array of strings
+Type.Array(Type.String())
+
+// Array of objects
+Type.Array(
+  Type.Object({
+    id: Type.String(),
+    value: Type.Number()
+  })
+)
+
+// Array with constraints
+Type.Array(Type.String(), { minItems: 1, maxItems: 10 })
+```
+
+### Objects
+
+```typescript
+Type.Object({
+  name: Type.String({ description: "User name" }),
+  age: Type.Number({ description: "User age" }),
+  email: Type.Optional(Type.String({ description: "Email address" }))
+})
+```
+
+### Enums (String Literals)
+
+**Important**: Do not use `Type.Union` with enum-like values. Use the `stringEnum` helper from the plugin SDK:
+
+```typescript
+import { stringEnum } from "openclaw/plugin-sdk";
+
+// Correct: Use stringEnum helper
+const tool = {
+  name: "set_mode",
+  input: Type.Object({
+    mode: stringEnum(["fast", "balanced", "quality"])
+  }),
+  execute: async (args) => {
+    // args.mode is "fast" | "balanced" | "quality"
+  }
+};
+
+// Also available: optionalStringEnum
+const tool2 = {
+  name: "configure",
+  input: Type.Object({
+    level: optionalStringEnum(["low", "medium", "high"])
+  })
+};
+```
+
+The `stringEnum` helper uses `Type.Unsafe` to generate a schema compatible with all LLM providers.
+
+### Nested Schemas
+
+```typescript
+Type.Object({
+  user: Type.Object({
+    name: Type.String(),
+    contacts: Type.Array(
+      Type.Object({
+        type: stringEnum(["email", "phone"]),
+        value: Type.String()
+      })
+    )
+  }),
+  preferences: Type.Optional(
+    Type.Object({
+      theme: stringEnum(["light", "dark"]),
+      notifications: Type.Boolean()
+    })
+  )
+})
+```
+
+## Tool Execution
+
+The `execute` function receives validated parameters and returns a result:
+
+```typescript
+execute: async (args) => {
+  // args is typed based on the input schema
+  const { name, style } = args;
+
+  // Perform action (API call, database query, etc.)
+  const result = await someOperation(name, style);
+
+  // Return result
+  return {
+    result: "success",
+    details: { greeting: result }
+  };
+}
+```
+
+### Return Values
+
+Tools should return an object with:
+
+- `result` - Status string (`"success"`, `"error"`, `"pending"`, etc.)
+- `details` - Additional data (optional)
+- `error` - Error message (for failures)
+
+```typescript
+// Success
+return {
+  result: "success",
+  details: { message: "Operation completed" }
+};
+
+// Error
+return {
+  result: "error",
+  error: "Failed to connect to API"
+};
+
+// With data
+return {
+  result: "success",
+  details: {
+    id: "123",
+    status: "created",
+    url: "https://example.com/resource/123"
+  }
+};
+```
+
+### Async Operations
+
+Tool execution can be async:
+
+```typescript
+execute: async (args) => {
+  // Wait for external API
+  const response = await fetch("https://api.example.com/data", {
+    method: "POST",
+    body: JSON.stringify(args)
+  });
+  
+  const data = await response.json();
+  
+  return {
+    result: response.ok ? "success" : "error",
+    details: data
+  };
+}
+```
+
+### Error Handling
+
+```typescript
+execute: async (args) => {
+  try {
+    const result = await riskyOperation(args);
+    return { result: "success", details: result };
+  } catch (err) {
+    return {
+      result: "error",
+      error: err instanceof Error ? err.message : String(err)
+    };
+  }
+}
+```
+
+## Tool Context
+
+Tools can access context via closures:
+
+```typescript
+function createToolWithContext(api: OpenClawPluginApi): AnyAgentTool {
+  return {
+    name: "my_tool",
+    description: "Tool with context",
+    input: Type.Object({ message: Type.String() }),
+    execute: async (args) => {
+      // Access plugin API
+      api.logger.info(`Tool called: ${args.message}`);
+      
+      // Access config
+      const config = api.config;
+      
+      // Access runtime services
+      const media = await api.runtime.media.loadWebMedia(args.url);
+      
+      return { result: "success" };
+    }
+  };
+}
+
+const plugin = {
+  id: "my-plugin",
+  register(api: OpenClawPluginApi) {
+    api.registerTool(createToolWithContext(api));
+  }
+};
+```
+
+## Tool Factories
+
+Tool factories generate tools dynamically based on context:
+
+```typescript
+import type { OpenClawPluginToolFactory } from "openclaw/plugin-sdk";
+
+const toolFactory: OpenClawPluginToolFactory = (ctx) => {
+  // ctx: { config, workspaceDir, agentId, sessionKey, messageChannel, ... }
+  
+  if (ctx.sandboxed) {
+    // Don't provide tools in sandboxed environments
+    return null;
+  }
+  
+  return {
+    name: "context_tool",
+    description: "Tool that uses context",
+    input: Type.Object({}),
+    execute: async () => {
+      return {
+        result: "success",
+        details: { agentId: ctx.agentId }
+      };
+    }
+  };
+};
+
+api.registerTool(toolFactory);
+```
+
+Factories can return:
+- A single tool
+- An array of tools
+- `null` or `undefined` (to skip registration)
+
+## Example: HTTP Request Tool
+
+```typescript
+import type { OpenClawPluginApi, AnyAgentTool } from "openclaw/plugin-sdk";
+import { Type } from "@sinclair/typebox";
+import { stringEnum } from "openclaw/plugin-sdk";
+
+function createHttpTool(api: OpenClawPluginApi): AnyAgentTool {
+  return {
+    name: "http_request",
+    description: "Make an HTTP request to an external API",
+    input: Type.Object({
+      url: Type.String({ description: "URL to request" }),
+      method: stringEnum(["GET", "POST", "PUT", "DELETE"]),
+      body: Type.Optional(Type.String({ description: "Request body (JSON string)" })),
+      headers: Type.Optional(
+        Type.Object({}, { additionalProperties: Type.String() })
+      )
+    }),
+    execute: async (args) => {
+      try {
+        const response = await fetch(args.url, {
+          method: args.method,
+          headers: {
+            "Content-Type": "application/json",
+            ...args.headers
+          },
+          body: args.body
+        });
+
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
+
+        return {
+          result: response.ok ? "success" : "error",
+          details: {
+            status: response.status,
+            statusText: response.statusText,
+            data
+          }
+        };
+      } catch (err) {
+        api.logger.error(`HTTP request failed: ${err}`);
+        return {
+          result: "error",
+          error: err instanceof Error ? err.message : String(err)
+        };
+      }
+    }
+  };
+}
+
+const plugin = {
+  id: "http-tools",
+  register(api: OpenClawPluginApi) {
+    api.registerTool(createHttpTool(api), { optional: true });
+  }
+};
+
+export default plugin;
+```
+
+## Example: Database Query Tool
+
+```typescript
+import type { OpenClawPluginApi, AnyAgentTool } from "openclaw/plugin-sdk";
+import { Type } from "@sinclair/typebox";
+import Database from "better-sqlite3";
+
+function createDbQueryTool(api: OpenClawPluginApi): AnyAgentTool {
+  const dbPath = api.resolvePath("./data.db");
+  const db = new Database(dbPath);
+
+  return {
+    name: "db_query",
+    description: "Execute a SQL query on the local database",
+    input: Type.Object({
+      query: Type.String({ description: "SQL query to execute" }),
+      params: Type.Optional(
+        Type.Array(Type.Union([Type.String(), Type.Number()]))
+      )
+    }),
+    execute: async (args) => {
+      try {
+        const stmt = db.prepare(args.query);
+        const rows = stmt.all(...(args.params ?? []));
+        return {
+          result: "success",
+          details: { rows, count: rows.length }
+        };
+      } catch (err) {
+        api.logger.error(`Query failed: ${err}`);
+        return {
+          result: "error",
+          error: err instanceof Error ? err.message : String(err)
+        };
+      }
+    }
+  };
+}
+```
+
+## Tool Hooks
+
+You can intercept tool calls with hooks:
+
+```typescript
+api.registerHook("before_tool_call", async (event, ctx) => {
+  api.logger.info(`Tool call: ${event.toolName}`);
+  
+  // Block dangerous operations
+  if (event.toolName === "delete_file" && !event.params.confirmed) {
+    return {
+      block: true,
+      blockReason: "Destructive operation requires confirmation"
+    };
+  }
+});
+
+api.registerHook("after_tool_call", async (event, ctx) => {
+  if (event.error) {
+    api.logger.error(`Tool ${event.toolName} failed: ${event.error}`);
+  } else {
+    api.logger.info(`Tool ${event.toolName} succeeded in ${event.durationMs}ms`);
+  }
+});
+```
+
+See [Hooks](/plugins/hooks) for details.
+
+## Best Practices
+
+### 1. Clear Descriptions
+
+Write clear, actionable descriptions that help the LLM understand when to use the tool:
+
+```typescript
+// Good
+description: "Send an email to one or more recipients. Use this when the user asks to email someone or share information via email."
+
+// Bad
+description: "Email tool"
+```
+
+### 2. Validate Input
+
+Use TypeBox constraints to validate input:
+
+```typescript
+Type.String({ minLength: 1, maxLength: 500 })
+Type.Number({ minimum: 0, maximum: 100 })
+Type.Array(Type.String(), { minItems: 1 })
+```
+
+### 3. Handle Errors Gracefully
+
+Always catch errors and return structured error responses:
+
+```typescript
+try {
+  const result = await operation();
+  return { result: "success", details: result };
+} catch (err) {
+  return { result: "error", error: String(err) };
+}
+```
+
+### 4. Use Optional Tools for Sensitive Operations
+
+Mark destructive or sensitive tools as optional:
+
+```typescript
+api.registerTool(deleteTool, { optional: true });
+```
+
+### 5. Log Tool Activity
+
+Use the plugin logger for diagnostics:
+
+```typescript
+execute: async (args) => {
+  api.logger.info(`Executing ${tool.name} with args: ${JSON.stringify(args)}`);
+  // ...
+}
+```
+
+## Next Steps
+
+- [Hooks](/plugins/hooks) - Intercept tool execution
+- [Channels](/plugins/channels) - Build channel integrations
+- [Examples](/plugins/examples) - Real-world plugin examples

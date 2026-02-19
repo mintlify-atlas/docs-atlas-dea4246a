@@ -1,0 +1,291 @@
+---
+title: "Built-in Extensions"
+description: "Overview of OpenClaw's built-in plugins and extensions"
+---
+
+OpenClaw includes 39+ built-in extensions demonstrating plugin patterns and providing ready-to-use integrations. Extensions are organized in the [`extensions/`](https://github.com/openclaw/openclaw/tree/main/extensions) directory.
+
+## Channel Plugins
+
+Channel plugins integrate messaging platforms:
+
+<CardGroup cols={2}>
+  <Card title="Matrix" icon="matrix" href="/channels/matrix">
+    Open protocol for decentralized communication. Supports encrypted DMs and rooms.
+  </Card>
+  
+  <Card title="Microsoft Teams" icon="microsoft" href="/channels/msteams">
+    Enterprise chat via Bot Framework. Supports teams, channels, and 1:1 chats.
+  </Card>
+  
+  <Card title="IRC" icon="hashtag">
+    Classic IRC protocol. Connect to Libera.Chat, OFTC, and other networks.
+  </Card>
+  
+  <Card title="Mattermost" icon="comments">
+    Open-source Slack alternative. Self-hosted team communication.
+  </Card>
+  
+  <Card title="Nextcloud Talk" icon="cloud">
+    Nextcloud-integrated chat. Self-hosted video calls and messaging.
+  </Card>
+  
+  <Card title="Feishu (Lark)" icon="building">
+    Enterprise communication platform by ByteDance.
+  </Card>
+  
+  <Card title="Google Chat" icon="google">
+    Google Workspace chat integration.
+  </Card>
+  
+  <Card title="LINE" icon="line">
+    Popular messaging app in Asia. Flex messages and rich cards.
+  </Card>
+  
+  <Card title="Twitch" icon="twitch">
+    Live streaming chat integration.
+  </Card>
+  
+  <Card title="Nostr" icon="bolt">
+    Decentralized social protocol.
+  </Card>
+  
+  <Card title="Tlon (Urbit)" icon="ship">
+    Urbit messaging integration.
+  </Card>
+  
+  <Card title="Zalo" icon="z">
+    Vietnamese messaging platform.
+  </Card>
+</CardGroup>
+
+### Core Channels (Built-in)
+
+These channels are built into OpenClaw core:
+
+- **Telegram** - `src/telegram/` - Telegram Bot API
+- **Discord** - `src/discord/` + `extensions/discord` - Discord bot integration
+- **Slack** - `src/slack/` + `extensions/slack` - Slack Bolt framework
+- **Signal** - `src/signal/` + `extensions/signal` - Signal CLI integration
+- **iMessage** - `src/imessage/` + `extensions/imessage` - macOS iMessage bridge
+- **WhatsApp** - `src/web/` + `extensions/whatsapp` - WhatsApp Web (Baileys)
+- **BlueBubbles** - `extensions/bluebubbles` - iMessage cloud integration
+
+## Tool Plugins
+
+Tool plugins add custom agent capabilities:
+
+### LLM Task
+
+**Package:** `extensions/llm-task`
+
+JSON-only LLM task runner for drafting, summarizing, and classifying. Designed for workflow engines.
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "llm-task": { "enabled": true }
+    }
+  },
+  "agents": {
+    "list": [
+      { "id": "main", "tools": { "allow": ["llm-task"] } }
+    ]
+  }
+}
+```
+
+### Lobster
+
+**Package:** `@openclaw/lobster`
+
+Workflow orchestration with typed pipelines and resumable approvals. Build multi-step workflows with human-in-the-loop approval gates.
+
+### Phone Control
+
+**Package:** `extensions/phone-control`
+
+Control phone functions (Android intents, iOS shortcuts) via agent tools.
+
+### Voice Call
+
+**Package:** `@openclaw/voice-call`
+
+Voice call tools for telephony integrations. WebRTC media streaming.
+
+## Service Plugins
+
+Service plugins run background tasks:
+
+### Diagnostics (OpenTelemetry)
+
+**Package:** `extensions/diagnostics-otel`
+
+Export diagnostics events to OpenTelemetry. Integrates with observability platforms (Jaeger, Zipkin, etc.).
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "diagnostics-otel": {
+        "enabled": true,
+        "config": {
+          "endpoint": "http://localhost:4318/v1/traces"
+        }
+      }
+    }
+  }
+}
+```
+
+### Copilot Proxy
+
+**Package:** `extensions/copilot-proxy`
+
+Proxy GitHub Copilot requests for custom model routing.
+
+### Device Pair
+
+**Package:** `extensions/device-pair`
+
+Device pairing service for multi-device setups.
+
+## Memory Plugins
+
+Memory plugins provide persistent storage:
+
+### Memory Core
+
+**Package:** `extensions/memory-core`
+
+Core memory interfaces and abstractions.
+
+### Memory (LanceDB)
+
+**Package:** `extensions/memory-lancedb`
+
+Vector memory storage with LanceDB. Embeddings, semantic search, and RAG.
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "memory-lancedb": {
+        "enabled": true,
+        "config": {
+          "tableName": "openclaw_memory",
+          "embeddingProvider": "openai"
+        }
+      }
+    }
+  }
+}
+```
+
+## Auth Plugins
+
+Auth plugins provide authentication flows:
+
+### Google Antigravity Auth
+
+**Package:** `extensions/google-antigravity-auth`
+
+Google authentication via Antigravity (internal Google API).
+
+### Google Gemini CLI Auth
+
+**Package:** `extensions/google-gemini-cli-auth`
+
+CLI-based authentication for Google Gemini API.
+
+### Minimax Portal Auth
+
+**Package:** `extensions/minimax-portal-auth`
+
+Authentication for Minimax AI portal.
+
+### Qwen Portal Auth
+
+**Package:** `extensions/qwen-portal-auth`
+
+Authentication for Qwen (Alibaba) AI portal.
+
+## Utility Plugins
+
+### Open Prose
+
+**Package:** `extensions/open-prose`
+
+Rich text editing and prose formatting utilities.
+
+### Thread Ownership
+
+**Package:** `extensions/thread-ownership`
+
+Manage thread ownership in multi-agent environments.
+
+### Talk Voice
+
+**Package:** `extensions/talk-voice`
+
+Voice synthesis and TTS utilities.
+
+## Installing Extensions
+
+Most extensions are bundled with OpenClaw. To enable an extension:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "matrix": { "enabled": true }
+    }
+  }
+}
+```
+
+Or install from npm:
+
+```bash
+openclaw plugins install @openclaw/matrix
+```
+
+## Extension Metadata
+
+Extensions declare metadata in `package.json`:
+
+```json
+{
+  "name": "@openclaw/matrix",
+  "openclaw": {
+    "extensions": ["./index.ts"],
+    "channel": {
+      "id": "matrix",
+      "label": "Matrix",
+      "docsPath": "/channels/matrix",
+      "order": 70
+    },
+    "install": {
+      "npmSpec": "@openclaw/matrix",
+      "localPath": "extensions/matrix",
+      "defaultChoice": "npm"
+    }
+  }
+}
+```
+
+## Exploring Extensions
+
+Browse the [extensions directory](https://github.com/openclaw/openclaw/tree/main/extensions) to explore implementations:
+
+- **Channel plugins:** `matrix`, `msteams`, `irc`, `mattermost`
+- **Tool plugins:** `llm-task`, `lobster`, `voice-call`
+- **Service plugins:** `diagnostics-otel`, `memory-lancedb`
+- **Auth plugins:** `google-antigravity-auth`, `minimax-portal-auth`
+
+## Next Steps
+
+- [Plugin SDK Reference](/plugins/plugin-sdk) - Build your own plugin
+- [Examples](/plugins/examples) - Detailed code examples
+- [Publishing](/plugins/publishing) - Share your plugin on npm

@@ -1,0 +1,529 @@
+---
+title: Multi-Agent Routing
+description: Route channels and users to isolated agents with separate workspaces, sessions, and configurations
+---
+
+# Multi-Agent Routing
+
+OpenClaw supports routing different channels, accounts, and users to isolated agent instances, each with their own workspace, session state, and configuration.
+
+## Overview
+
+**Multi-agent routing** enables:
+- **Workspace isolation** — Separate working directories per agent
+- **Session isolation** — Independent conversation history
+- **Model customization** — Different models per agent
+- **Specialized agents** — Code, creative writing, research, etc.
+- **Team workspaces** — Route teams/channels to dedicated agents
+
+## Architecture
+
+```
+Gateway (single process)
+├── Agent: main (default)
+│   ├── Workspace: ~/.openclaw/workspace
+│   ├── Sessions: ~/.openclaw/agents/main/sessions/
+│   └── Routes: default for unmatched traffic
+├── Agent: code-assistant
+│   ├── Workspace: ~/.openclaw/agents/code-assistant/workspace
+│   ├── Sessions: ~/.openclaw/agents/code-assistant/sessions/
+│   └── Routes: Discord #dev-team, Telegram @coder
+└── Agent: creative
+    ├── Workspace: ~/.openclaw/agents/creative/workspace
+    ├── Sessions: ~/.openclaw/agents/creative/sessions/
+    └── Routes: Slack #creative, WhatsApp +1234567890
+```
+
+Each agent:
+- Runs in the same gateway process
+- Has isolated workspace and sessions
+- Can use different models
+- Routes based on channel, account, or peer
+
+## Configuration
+
+### Define Agents
+
+```yaml
+# ~/.openclaw/config.json
+agents:
+  main:
+    label: "General Assistant"
+    workspace: ~/.openclaw/workspace
+    provider: anthropic
+    model: claude-opus-4.6
+  
+  code-assistant:
+    label: "Code Expert"
+    workspace: ~/.openclaw/agents/code-assistant/workspace
+    provider: anthropic
+    model: claude-sonnet-4.2
+    systemPrompt: "You are an expert software engineer specializing in TypeScript, Python, and Rust."
+  
+  creative:
+    label: "Creative Writer"
+    workspace: ~/.openclaw/agents/creative/workspace
+    provider: anthropic
+    model: claude-opus-4.6
+    systemPrompt: "You are a creative writing assistant specializing in storytelling, poetry, and narrative design."
+```
+
+### Route Channels to Agents
+
+```yaml
+# ~/.openclaw/config.json
+routing:
+  rules:
+    # Route Discord #dev-team to code assistant
+    - match:
+        channel: discord
+        groupId: "123456789"  # Channel ID
+      agent: code-assistant
+    
+    # Route Telegram user to creative agent
+    - match:
+        channel: telegram
+        peerId: "987654321"  # User ID
+      agent: creative
+    
+    # Route WhatsApp account to specific agent
+    - match:
+        channel: whatsapp
+        accountId: "main"
+      agent: main
+    
+    # Route Slack workspace to specialized agent
+    - match:
+        channel: slack
+        groupId: "C01234567"  # Slack channel ID
+      agent: code-assistant
+  
+  # Default agent for unmatched traffic
+  defaultAgent: main
+```
+
+### Routing Match Criteria
+
+Routes can match on:
+
+| Field | Description | Example |
+|-------|-------------|----------|
+| `channel` | Channel type | `discord`, `telegram`, `slack`, `whatsapp` |
+| `accountId` | Account identifier | `main`, `work`, `personal` |
+| `groupId` | Group/channel ID | Discord channel ID, Slack channel ID |
+| `peerId` | User/peer identifier | Telegram user ID, WhatsApp number |
+| `agent` | Target agent | `main`, `code-assistant`, `creative` |
+
+## Session Scoping
+
+Control session isolation with `session.dmScope`:
+
+```yaml
+# ~/.openclaw/config.json
+session:
+  dmScope: per-channel-peer  # Recommended for multi-user
+```
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `main` | All DMs share main session | Single-user, simple setup |
+| `per-channel-peer` | Separate session per (channel, peer) | Multi-user, per-channel isolation |
+| `per-account-channel-peer` | Separate session per (account, channel, peer) | Multi-account channels |
+
+From `src/commands/doctor-security.ts:116-122`.
+
+## Use Cases
+
+### Team Workspaces
+
+Route different teams to isolated agents:
+
+```yaml
+agents:
+  engineering:
+    label: "Engineering Team"
+    workspace: ~/teams/engineering
+    model: claude-sonnet-4.2
+  
+  marketing:
+    label: "Marketing Team"
+    workspace: ~/teams/marketing
+    model: claude-opus-4.6
+
+routing:
+  rules:
+    - match:
+        channel: slack
+        groupId: "C-ENG-TEAM"
+      agent: engineering
+    
+    - match:
+        channel: slack
+        groupId: "C-MKT-TEAM"
+      agent: marketing
+```
+
+### Specialized Agents
+
+Create domain-specific assistants:
+
+```yaml
+agents:
+  coder:
+    label: "Code Assistant"
+    systemPrompt: |
+      You are an expert software engineer.
+      - Prefer TypeScript for new code
+      - Follow clean code principles
+      - Include tests for critical logic
+    workspace: ~/code-workspace
+  
+  writer:
+    label: "Creative Writer"
+    systemPrompt: |
+      You are a creative writing assistant.
+      - Focus on storytelling and narrative flow
+      - Use vivid descriptions
+      - Maintain consistent character voices
+    workspace: ~/writing-workspace
+  
+  researcher:
+    label: "Research Assistant"
+    systemPrompt: |
+      You are a research assistant.
+      - Provide citations
+      - Verify facts before stating them
+      - Summarize complex topics clearly
+    workspace: ~/research-workspace
+```
+
+### Personal vs Work
+
+Separate personal and work contexts:
+
+```yaml
+agents:
+  personal:
+    label: "Personal Assistant"
+    workspace: ~/personal
+  
+  work:
+    label: "Work Assistant"
+    workspace: ~/work
+
+routing:
+  rules:
+    # Personal phone
+    - match:
+        channel: whatsapp
+        accountId: "personal"
+      agent: personal
+    
+    # Work Slack
+    - match:
+        channel: slack
+        accountId: "work"
+      agent: work
+    
+    # Personal Telegram
+    - match:
+        channel: telegram
+      agent: personal
+```
+
+### Multi-Account Routing
+
+Route multiple accounts to different agents:
+
+```yaml
+channels:
+  whatsapp:
+    accounts:
+      - id: personal
+        phoneNumber: "+1234567890"
+      - id: work
+        phoneNumber: "+0987654321"
+
+routing:
+  rules:
+    - match:
+        channel: whatsapp
+        accountId: personal
+      agent: personal-agent
+    
+    - match:
+        channel: whatsapp
+        accountId: work
+      agent: work-agent
+```
+
+## CLI Commands
+
+### List Agents
+
+```bash
+# View configured agents
+openclaw config get agents
+
+# View routing rules
+openclaw config get routing
+```
+
+### Send to Specific Agent
+
+```bash
+# Send message via specific agent
+openclaw agent --agent code-assistant --message "Review this code"
+
+# Send to channel from specific agent
+openclaw message send \
+  --to discord:123456789 \
+  --message "Hello from code assistant" \
+  --agent code-assistant
+```
+
+### Check Agent Workspace
+
+```bash
+# View agent workspace location
+openclaw config get agents.code-assistant.workspace
+
+# List workspace files
+ls -la ~/.openclaw/agents/code-assistant/workspace/
+
+# View agent sessions
+ls -la ~/.openclaw/agents/code-assistant/sessions/
+```
+
+## Workspace Management
+
+### Workspace Structure
+
+Each agent has an isolated workspace:
+
+```
+~/.openclaw/agents/<agent-id>/
+├── workspace/          # Agent working directory
+│   ├── code/          # Code projects
+│   ├── docs/          # Documentation
+│   └── temp/          # Temporary files
+└── sessions/          # Session logs
+    ├── main.jsonl
+    └── <session-id>.jsonl
+```
+
+### Initialize Agent Workspace
+
+```bash
+# Create workspace directory
+mkdir -p ~/.openclaw/agents/code-assistant/workspace
+
+# Set workspace in config
+openclaw config set agents.code-assistant.workspace \
+  ~/.openclaw/agents/code-assistant/workspace
+
+# Populate workspace
+cp -r ~/templates/code-workspace/* \
+  ~/.openclaw/agents/code-assistant/workspace/
+```
+
+### Backup Agent Data
+
+```bash
+# Backup specific agent
+tar -czf code-assistant-backup.tar.gz \
+  ~/.openclaw/agents/code-assistant/
+
+# Backup all agents
+tar -czf all-agents-backup.tar.gz \
+  ~/.openclaw/agents/
+```
+
+## Advanced Configuration
+
+### Per-Agent Model Settings
+
+```yaml
+agents:
+  fast-assistant:
+    provider: anthropic
+    model: claude-haiku-4
+    maxTokens: 1024
+    temperature: 0.7
+  
+  deep-thinker:
+    provider: anthropic
+    model: claude-opus-4.6
+    maxTokens: 4096
+    temperature: 0.3
+    thinkingMode: high
+```
+
+### Per-Agent Tools
+
+Enable/disable tools per agent:
+
+```yaml
+agents:
+  browser-agent:
+    tools:
+      browser: true
+      canvas: false
+      bash: true
+  
+  creative-agent:
+    tools:
+      browser: false
+      canvas: true
+      bash: false
+```
+
+### Per-Agent Hooks
+
+Customize hooks per agent:
+
+```yaml
+agents:
+  code-assistant:
+    hooks:
+      enabled:
+        - command-logger
+        - session-memory
+      disabled:
+        - boot-md
+```
+
+## Monitoring
+
+### View Agent Activity
+
+```bash
+# Check gateway status
+openclaw channels status
+
+# View agent sessions
+openclaw sessions list --agent code-assistant
+
+# View agent logs
+tail -f ~/.openclaw/agents/code-assistant/sessions/main.jsonl
+```
+
+### Debug Routing
+
+```bash
+# Run doctor to check routing config
+openclaw doctor
+
+# Test routing
+openclaw agent --message "test" --debug
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Agent not routing correctly">
+    **Problem:** Messages going to wrong agent.
+    
+    **Debug:**
+    ```bash
+    # Verify routing rules
+    openclaw config get routing.rules
+    
+    # Check default agent
+    openclaw config get routing.defaultAgent
+    
+    # Test with explicit agent
+    openclaw agent --agent code-assistant --message "test"
+    ```
+  </Accordion>
+  
+  <Accordion title="Agent workspace not found">
+    **Problem:** Agent can't access workspace files.
+    
+    **Fix:**
+    ```bash
+    # Verify workspace path
+    openclaw config get agents.code-assistant.workspace
+    
+    # Create workspace
+    mkdir -p ~/.openclaw/agents/code-assistant/workspace
+    
+    # Update config
+    openclaw config set agents.code-assistant.workspace \
+      ~/.openclaw/agents/code-assistant/workspace
+    ```
+  </Accordion>
+  
+  <Accordion title="Session state not isolated">
+    **Problem:** Agents sharing session state.
+    
+    **Fix:**
+    ```bash
+    # Set session scope
+    openclaw config set session.dmScope per-channel-peer
+    
+    # Verify isolation
+    ls -la ~/.openclaw/agents/*/sessions/
+    ```
+  </Accordion>
+  
+  <Accordion title="Routing rules not matching">
+    **Problem:** Rules not matching expected traffic.
+    
+    **Debug:**
+    ```bash
+    # Check channel IDs
+    openclaw channels status
+    
+    # Verify group/peer IDs
+    # Discord: Right-click channel > Copy ID (dev mode)
+    # Telegram: Use @userinfobot
+    # Slack: Click channel name > Copy link (ID in URL)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="Use descriptive agent IDs">
+    Choose clear names: `code-assistant`, `creative-writer`, not `agent1`, `agent2`
+  </Step>
+  
+  <Step title="Set explicit workspace paths">
+    Avoid conflicts by using unique workspace directories per agent
+  </Step>
+  
+  <Step title="Enable session isolation">
+    Use `session.dmScope: per-channel-peer` for multi-user setups
+  </Step>
+  
+  <Step title="Document routing rules">
+    Add comments in config to explain routing logic
+  </Step>
+  
+  <Step title="Test routing before production">
+    Verify routing with test messages before deploying
+  </Step>
+  
+  <Step title="Backup agent workspaces">
+    Regularly backup agent-specific workspace and session data
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Security Guide" icon="shield" href="/guides/security">
+    Secure multi-agent setups with allowlists
+  </Card>
+  <Card title="Deployment" icon="cloud" href="/guides/deployment">
+    Deploy multi-agent gateway to production
+  </Card>
+  <Card title="Configuration" icon="gear" href="/gateway/configuration">
+    Advanced gateway configuration
+  </Card>
+  <Card title="Sessions" icon="comments" href="/concepts/session">
+    Understand session management
+  </Card>
+</CardGroup>

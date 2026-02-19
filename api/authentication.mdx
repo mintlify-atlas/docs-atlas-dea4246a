@@ -1,0 +1,276 @@
+---
+title: "Authentication"
+description: "Gateway API authentication mechanisms"
+---
+
+# Authentication
+
+The OpenClaw Gateway API supports multiple authentication methods to secure access to your agents and data.
+
+## Authentication Methods
+
+### Bearer Token
+
+The primary authentication method. Include your token in the `Authorization` header:
+
+```bash
+Authorization: Bearer your-token-here
+```
+
+**Configuration:**
+
+```yaml
+gateway:
+  auth:
+    token: "your-secret-token"
+```
+
+**Example request:**
+
+```bash
+curl -X POST http://localhost:18789/v1/chat/completions \
+  -H "Authorization: Bearer your-token-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openclaw",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+### Password Authentication
+
+Alternative to token-based auth:
+
+```yaml
+gateway:
+  auth:
+    password: "your-password"
+```
+
+Send password as Bearer token:
+
+```bash
+Authorization: Bearer your-password
+```
+
+### Device Token Authentication
+
+For mobile and desktop clients, device tokens are issued after pairing:
+
+1. Client requests pairing via `node.pair.request`
+2. Gateway admin approves via `node.pair.approve`
+3. Client receives a device token
+4. Client authenticates with device token
+
+**WebSocket connection with device token:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "connect",
+  "params": {
+    "role": "node",
+    "auth": {
+      "token": "device-token-here"
+    }
+  }
+}
+```
+
+See [Device Pairing](/gateway/device-pairing) for details.
+
+### Tailscale Authentication
+
+When running behind Tailscale Serve, the Gateway can authenticate users via Tailscale identity:
+
+```yaml
+gateway:
+  tailscale:
+    mode: enabled  # or "require"
+```
+
+**Modes:**
+- `enabled` - Allow Tailscale auth alongside token/password
+- `require` - Only accept Tailscale-authenticated requests
+- `disabled` - Disable Tailscale auth
+
+Tailscale authentication reads `Tailscale-User-Login` headers injected by Tailscale Serve.
+
+### Trusted Proxy Authentication
+
+For trusted reverse proxies (e.g., Cloudflare, nginx):
+
+```yaml
+gateway:
+  auth:
+    trustedProxy:
+      enabled: true
+      header: "X-Forwarded-User"
+  trustedProxies:
+    - "10.0.0.1"
+    - "192.168.1.0/24"
+```
+
+The Gateway validates the client IP against `trustedProxies` and reads the user identity from the configured header.
+
+### Local Loopback (No Auth)
+
+Requests from `localhost` (127.0.0.1, ::1) are automatically authenticated when:
+- Client IP is loopback
+- Host header is `localhost`, `127.0.0.1`, or `::1`
+- No proxy forwarding headers present
+
+This allows local CLI tools to access the Gateway without explicit credentials.
+
+## Authentication Priority
+
+The Gateway checks authentication methods in this order:
+
+1. **Local loopback** - Bypass auth for local requests
+2. **Device token** - Check device token from pairing
+3. **Bearer token** - Check configured token
+4. **Password** - Check configured password
+5. **Tailscale** - Check Tailscale identity (if enabled)
+6. **Trusted proxy** - Check proxy header (if enabled)
+
+First successful method authenticates the request.
+
+## Rate Limiting
+
+To prevent brute-force attacks, the Gateway rate-limits failed authentication attempts:
+
+- **Limit**: 20 failures per client per 60-second window
+- **Tracking**: By client IP address
+- **Response**: HTTP `429 Too Many Requests` with `Retry-After` header
+
+**Rate limit response:**
+
+```json
+{
+  "error": {
+    "message": "Too many failed authentication attempts. Please try again later.",
+    "type": "rate_limited"
+  }
+}
+```
+
+**Response headers:**
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 42
+Content-Type: application/json
+```
+
+## WebSocket Authentication
+
+WebSocket connections authenticate during the initial `connect` handshake:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "connect",
+  "params": {
+    "role": "control",
+    "auth": {
+      "token": "your-token-here"
+    },
+    "client": {
+      "name": "My Client",
+      "version": "1.0.0"
+    }
+  }
+}
+```
+
+**Roles:**
+- `control` - Full control plane access
+- `node` - Device/node role (mobile, desktop)
+- `webchat` - Web chat interface
+
+See [WebSocket Protocol](/api/websocket) for details.
+
+## HTTP Authentication
+
+HTTP endpoints authenticate via `Authorization` header:
+
+```bash
+Authorization: Bearer your-token-here
+```
+
+Or via custom header (for hooks):
+
+```bash
+X-OpenClaw-Token: your-token-here
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use strong tokens">
+    Generate tokens with sufficient entropy:
+    
+    ```bash
+    openssl rand -hex 32
+    ```
+    
+    Store tokens securely (environment variables, secret managers).
+  </Accordion>
+  
+  <Accordion title="Limit network exposure">
+    Bind Gateway to loopback when possible:
+    
+    ```yaml
+    gateway:
+      bind: loopback  # only accessible from localhost
+    ```
+    
+    Use Tailscale or VPN for remote access instead of exposing to the internet.
+  </Accordion>
+  
+  <Accordion title="Rotate tokens regularly">
+    For device tokens, use rotation endpoints:
+    
+    ```json
+    {"method": "device.token.rotate", "params": {"deviceId": "..."}}
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor authentication failures">
+    Gateway logs failed authentication attempts. Monitor for suspicious activity:
+    
+    ```bash
+    openclaw logs | grep "auth failed"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+**401 Unauthorized:**
+- Verify token matches `gateway.auth.token` in config
+- Check token is sent in `Authorization: Bearer` header
+- Ensure no extra whitespace in token
+
+**429 Rate Limited:**
+- Wait for the `Retry-After` duration
+- Check for authentication failures in logs
+- Verify token is correct to avoid repeated failures
+
+**Connection refused:**
+- Verify Gateway is running: `openclaw status`
+- Check bind address: `openclaw config get gateway.bind`
+- Confirm port: `openclaw config get gateway.port`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="WebSocket Protocol" icon="plug" href="/api/websocket">
+    Connect via WebSocket
+  </Card>
+  <Card title="Device Pairing" icon="mobile" href="/gateway/device-pairing">
+    Pair mobile/desktop devices
+  </Card>
+</CardGroup>

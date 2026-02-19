@@ -1,0 +1,515 @@
+---
+title: "Sessions"
+description: "Session management API - create, list, delete, and patch sessions"
+---
+
+# Sessions API
+
+Sessions store conversation history and context for agent interactions. Each session is identified by a unique session key.
+
+## Session Keys
+
+Session keys follow the format:
+
+```
+<prefix>:<identifier>
+```
+
+**Examples:**
+- `user:alice` - User session
+- `signal:+1234567890` - Signal conversation
+- `telegram:@username` - Telegram chat
+- `discord:123456789` - Discord user
+- `hook:webhook-123` - Webhook session
+
+## List Sessions
+
+List all sessions with optional filtering.
+
+### Method: `sessions.list`
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 30,
+  "method": "sessions.list",
+  "params": {
+    "agentId": "default",
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+<ParamField path="agentId" type="string">
+  Filter by agent ID
+</ParamField>
+
+<ParamField path="limit" type="number" default={50}>
+  Maximum number of sessions to return
+</ParamField>
+
+<ParamField path="offset" type="number" default={0}>
+  Pagination offset
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 30,
+  "ok": true,
+  "payload": {
+    "sessions": [
+      {
+        "key": "user:alice",
+        "agentId": "default",
+        "model": "gpt-4",
+        "createdAt": 1234567890000,
+        "updatedAt": 1234567891000,
+        "messageCount": 15
+      },
+      {
+        "key": "signal:+1234567890",
+        "agentId": "default",
+        "model": "claude-opus-4",
+        "createdAt": 1234567800000,
+        "updatedAt": 1234567850000,
+        "messageCount": 42
+      }
+    ],
+    "total": 2
+  }
+}
+```
+
+<ResponseField name="sessions" type="array">
+  Array of session objects
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total number of sessions
+</ResponseField>
+
+## Preview Session
+
+Get session details and recent message history.
+
+### Method: `sessions.preview`
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 31,
+  "method": "sessions.preview",
+  "params": {
+    "key": "user:alice",
+    "limit": 20
+  }
+}
+```
+
+<ParamField path="key" type="string" required>
+  Session key
+</ParamField>
+
+<ParamField path="limit" type="number" default={20}>
+  Number of messages to include
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 31,
+  "ok": true,
+  "payload": {
+    "key": "user:alice",
+    "agentId": "default",
+    "model": "gpt-4",
+    "createdAt": 1234567890000,
+    "updatedAt": 1234567891000,
+    "messages": [
+      {
+        "type": "message",
+        "role": "user",
+        "sender": "Alice",
+        "body": "Hello!",
+        "timestamp": 1234567890000
+      },
+      {
+        "type": "message",
+        "role": "assistant",
+        "sender": "OpenClaw",
+        "body": "Hello! How can I help you?",
+        "timestamp": 1234567890500
+      }
+    ]
+  }
+}
+```
+
+<ResponseField name="key" type="string">
+  Session key
+</ResponseField>
+
+<ResponseField name="agentId" type="string">
+  Agent ID
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  Model identifier
+</ResponseField>
+
+<ResponseField name="messages" type="array">
+  Array of message objects (most recent first)
+</ResponseField>
+
+## Patch Session
+
+Update session metadata (agent, model, settings).
+
+### Method: `sessions.patch`
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 32,
+  "method": "sessions.patch",
+  "params": {
+    "key": "user:alice",
+    "agentId": "coder",
+    "model": "claude-opus-4"
+  }
+}
+```
+
+<ParamField path="key" type="string" required>
+  Session key
+</ParamField>
+
+<ParamField path="agentId" type="string">
+  New agent ID
+</ParamField>
+
+<ParamField path="model" type="string">
+  New model identifier
+</ParamField>
+
+<ParamField path="thinking" type="string">
+  New thinking budget: `"low"`, `"medium"`, `"high"`
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 32,
+  "ok": true,
+  "payload": {
+    "updated": true
+  }
+}
+```
+
+## Reset Session
+
+Clear session conversation history.
+
+### Method: `sessions.reset`
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 33,
+  "method": "sessions.reset",
+  "params": {
+    "key": "user:alice"
+  }
+}
+```
+
+<ParamField path="key" type="string" required>
+  Session key
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 33,
+  "ok": true,
+  "payload": {
+    "reset": true
+  }
+}
+```
+
+## Delete Session
+
+Permanently delete a session and its history.
+
+### Method: `sessions.delete`
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 34,
+  "method": "sessions.delete",
+  "params": {
+    "key": "user:alice"
+  }
+}
+```
+
+<ParamField path="key" type="string" required>
+  Session key
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 34,
+  "ok": true,
+  "payload": {
+    "deleted": true
+  }
+}
+```
+
+## Compact Session
+
+Compress session history to reduce storage.
+
+### Method: `sessions.compact`
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 35,
+  "method": "sessions.compact",
+  "params": {
+    "key": "user:alice"
+  }
+}
+```
+
+<ParamField path="key" type="string" required>
+  Session key
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 35,
+  "ok": true,
+  "payload": {
+    "compacted": true,
+    "beforeSize": 1024000,
+    "afterSize": 512000
+  }
+}
+```
+
+## Session Storage
+
+Sessions are stored in:
+
+```
+~/.openclaw/sessions/<agentId>/<sessionKey>.jsonl
+```
+
+- **Format**: JSONL (JSON Lines)
+- **Structure**: DAG-based conversation tree with `parentId` links
+- **Persistence**: File-based storage
+
+Do not modify session files directly. Use the Sessions API to ensure data integrity.
+
+## Session Events
+
+Session updates trigger events:
+
+**Session created:**
+
+```json
+{
+  "event": "session.created",
+  "payload": {
+    "key": "user:alice",
+    "agentId": "default"
+  }
+}
+```
+
+**Session updated:**
+
+```json
+{
+  "event": "session.updated",
+  "payload": {
+    "key": "user:alice",
+    "changes": {
+      "model": "claude-opus-4"
+    }
+  }
+}
+```
+
+## Example: Session Manager
+
+```javascript
+class SessionManager {
+  constructor(ws) {
+    this.ws = ws;
+    this.requestId = 0;
+  }
+  
+  async listSessions(agentId = null) {
+    const id = ++this.requestId;
+    const params = agentId ? { agentId } : {};
+    
+    this.ws.send(JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      method: "sessions.list",
+      params
+    }));
+    
+    return this.waitForResponse(id);
+  }
+  
+  async previewSession(key, limit = 20) {
+    const id = ++this.requestId;
+    
+    this.ws.send(JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      method: "sessions.preview",
+      params: { key, limit }
+    }));
+    
+    return this.waitForResponse(id);
+  }
+  
+  async patchSession(key, updates) {
+    const id = ++this.requestId;
+    
+    this.ws.send(JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      method: "sessions.patch",
+      params: { key, ...updates }
+    }));
+    
+    return this.waitForResponse(id);
+  }
+  
+  async resetSession(key) {
+    const id = ++this.requestId;
+    
+    this.ws.send(JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      method: "sessions.reset",
+      params: { key }
+    }));
+    
+    return this.waitForResponse(id);
+  }
+  
+  waitForResponse(id) {
+    return new Promise((resolve, reject) => {
+      const handler = (data) => {
+        const frame = JSON.parse(data);
+        if (frame.id === id) {
+          this.ws.removeListener('message', handler);
+          if (frame.ok) {
+            resolve(frame.payload);
+          } else {
+            reject(frame.error);
+          }
+        }
+      };
+      this.ws.on('message', handler);
+    });
+  }
+}
+
+// Usage
+const manager = new SessionManager(ws);
+
+// List all sessions
+const { sessions } = await manager.listSessions();
+console.log('Sessions:', sessions);
+
+// Preview session
+const preview = await manager.previewSession('user:alice');
+console.log('Messages:', preview.messages);
+
+// Switch agent
+await manager.patchSession('user:alice', { agentId: 'coder' });
+
+// Reset conversation
+await manager.resetSession('user:alice');
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use meaningful session keys">
+    Choose descriptive prefixes and identifiers:
+    
+    ```
+    user:alice          ✓
+    signal:+1234567890  ✓
+    session123          ✗ (no prefix)
+    ```
+  </Accordion>
+  
+  <Accordion title="Clean up old sessions">
+    Periodically delete inactive sessions:
+    
+    ```javascript
+    const { sessions } = await listSessions();
+    const oldSessions = sessions.filter(s => 
+      Date.now() - s.updatedAt > 30 * 24 * 60 * 60 * 1000 // 30 days
+    );
+    for (const session of oldSessions) {
+      await deleteSession(session.key);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Compact long conversations">
+    Use `sessions.compact` for sessions with many messages to reduce storage.
+  </Accordion>
+  
+  <Accordion title="Don't modify session files directly">
+    Always use the Sessions API. Direct file modification can corrupt the session DAG.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agent Protocol" icon="robot" href="/api/agent-protocol">
+    Invoke agents with session context
+  </Card>
+  <Card title="Messages" icon="message" href="/api/messages">
+    Send messages via channels
+  </Card>
+</CardGroup>

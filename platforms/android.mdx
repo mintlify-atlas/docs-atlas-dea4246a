@@ -1,0 +1,347 @@
+---
+title: Android App
+summary: Android companion node app with Gateway pairing, Canvas, Chat, and Camera
+---
+
+# Android App
+
+## Overview
+
+The OpenClaw Android app is a **companion node** that connects to the Gateway WebSocket and exposes Canvas, Chat, and Camera capabilities.
+
+**Key points:**
+- Role: Node (Android does not host the Gateway)
+- Gateway required: Yes (run on macOS, Linux, or Windows via WSL2)
+- Connection: WebSocket over mDNS/NSD discovery or manual host/port
+- Foreground service: Keeps connection alive with persistent notification
+- Shared sessions: Chat uses Gateway's **main** session key (history shared across all clients)
+
+## Requirements
+
+- **Gateway**: Running on macOS, Linux, or Windows (WSL2)
+- **Network**:
+  - Same LAN with mDNS/NSD, **or**
+  - Tailscale tailnet with Wide-Area Bonjour (unicast DNS-SD), **or**
+  - Manual gateway host/port
+- **Android**: minSdk 31 (Android 12+)
+- **CLI access**: To gateway host for pairing approval
+
+## Installation
+
+### APK distribution
+
+<Info>
+No public APK distribution yet. Build from source or request internal APK.
+</Info>
+
+### Build from source
+
+Requirements:
+- Android Studio (latest stable)
+- JDK 17+
+- Android SDK (auto-detected at `~/Library/Android/sdk` on macOS)
+
+Open in Android Studio:
+```bash
+cd apps/android
+# Open this folder in Android Studio
+```
+
+Or build via Gradle:
+```bash
+cd apps/android
+
+# Build debug APK
+./gradlew :app:assembleDebug
+
+# Install to connected device/emulator
+./gradlew :app:installDebug
+
+# Run tests
+./gradlew :app:testDebugUnitTest
+```
+
+From repository root:
+```bash
+# Assemble APK
+pnpm android:assemble
+
+# Install APK
+pnpm android:install
+
+# Install and launch
+pnpm android:run
+```
+
+Output APK: `apps/android/app/build/outputs/apk/debug/openclaw-<version>-debug.apk`
+
+## Node pairing
+
+### Quick start
+
+1. Start the Gateway:
+```bash
+openclaw gateway --port 18789 --verbose
+```
+
+2. In Android app:
+   - Open **Settings**
+   - Under **Discovered Gateways**, select your gateway and tap **Connect**
+   - If discovery fails, use **Advanced → Manual Gateway** (enter host + port)
+
+3. Approve pairing on gateway host:
+```bash
+openclaw nodes pending
+openclaw nodes approve <requestId>
+```
+
+4. Verify connection:
+```bash
+openclaw nodes status
+openclaw gateway call node.list --params "{}"
+```
+
+After first successful pairing, Android auto-reconnects on launch.
+
+### Discovery
+
+**mDNS/NSD (LAN)**: Gateway advertises `_openclaw-gw._tcp` on `local.`. Android NSD lists these automatically.
+
+**Tailnet (cross-network)**: Use Wide-Area Bonjour / unicast DNS-SD:
+1. Set up DNS-SD zone (e.g., `openclaw.internal.`) on gateway host
+2. Publish `_openclaw-gw._tcp` records via CoreDNS
+3. Configure Tailscale split DNS for the domain
+4. Android app includes dnsjava for unicast DNS-SD support
+
+See [Bonjour](/gateway/bonjour) for setup.
+
+**Manual host/port**: In Settings → Advanced → Manual Gateway, enter gateway hostname/IP and port (default 18789).
+
+## Foreground service
+
+The app keeps the Gateway connection alive via a foreground service:
+- **Notification**: Persistent with "Disconnect" action
+- **Service type**: `dataSync|microphone|mediaProjection` (AndroidManifest.xml:40)
+- **Auto-start**: Reconnects on app launch after successful pairing
+- **Manual control**: Tap "Disconnect" in notification to stop service
+
+## Chat integration
+
+The Android Chat panel uses Gateway's **main session key**:
+- History shared with WebChat, macOS app, iOS app, and other clients
+- Commands: `chat.history`, `chat.send`, `chat.subscribe`
+- Push updates via `event:"chat"` subscription
+- Session picker available to switch between Gateway sessions
+
+## Canvas support
+
+Android node renders a WebView canvas:
+
+```bash
+# Navigate to Gateway canvas workspace
+openclaw nodes invoke --node "Android Node" --command canvas.navigate --params '{"url":"http://<gateway-hostname>.local:18789/__openclaw__/canvas/"}'
+
+# For Tailscale, use MagicDNS name or tailnet IP
+openclaw nodes invoke --node "Android Node" --command canvas.navigate --params '{"url":"http://<gateway-magicdns>:18789/__openclaw__/canvas/"}'
+
+# Evaluate JavaScript
+openclaw nodes invoke --node "Android Node" --command canvas.eval --params '{"javaScript":"document.body.style.background='#00ff00'"}'
+
+# Take snapshot (returns {format, base64})
+openclaw nodes invoke --node "Android Node" --command canvas.snapshot --params '{"format":"jpeg","maxWidth":1200}'
+```
+
+Canvas commands (foreground only):
+- `canvas.navigate`: Load URL (use `{"url":""}` or `{"url":"/"}` for default scaffold)
+- `canvas.eval`: Execute JavaScript in WebView
+- `canvas.snapshot`: Capture canvas as image
+- `canvas.a2ui.push`, `canvas.a2ui.reset`: A2UI protocol
+
+Gateway Canvas Host:
+- Path: `http://<gateway-host>:18789/__openclaw__/canvas/`
+- A2UI host: `http://<gateway-host>:18789/__openclaw__/a2ui/`
+- Live reload: Injects client that reloads on file changes in `~/.openclaw/workspace/canvas/`
+
+## Camera support
+
+Camera commands (foreground only, permission-gated):
+
+```bash
+# Snap photo (JPEG)
+openclaw nodes invoke --node "Android Node" --command camera.snap --params '{}'
+
+# Record clip (MP4)
+openclaw nodes invoke --node "Android Node" --command camera.clip --params '{"durationSeconds":5,"includeAudio":true}'
+```
+
+Permissions required:
+- `CAMERA` (android.permission.CAMERA): For snap and clip
+- `RECORD_AUDIO` (android.permission.RECORD_AUDIO): For clip with `includeAudio=true`
+
+See [Camera node](/nodes/camera) for parameters.
+
+## Voice wake
+
+Voice wake configuration available in Settings → Voice:
+- On-device wake word detection
+- Configurable wake phrases
+- Foreground-first reliability (background may suspend audio)
+- Commands forwarded to Gateway
+
+## Permissions
+
+Required permissions (AndroidManifest.xml:1-24):
+
+### Network & discovery
+- `INTERNET`: Gateway WebSocket connection
+- `ACCESS_NETWORK_STATE`: Connection monitoring
+- `NEARBY_WIFI_DEVICES` (Android 13+): NSD discovery
+- `ACCESS_FINE_LOCATION` (Android 12-): Required for NSD scanning
+- `ACCESS_COARSE_LOCATION`: Fallback location
+- `ACCESS_BACKGROUND_LOCATION`: Background location (optional)
+
+### Foreground service
+- `FOREGROUND_SERVICE`: Base permission
+- `FOREGROUND_SERVICE_DATA_SYNC`: Gateway connection
+- `FOREGROUND_SERVICE_MICROPHONE`: Voice features
+- `FOREGROUND_SERVICE_MEDIA_PROJECTION`: Screen capture
+- `POST_NOTIFICATIONS` (Android 13+): Service notification
+
+### Node capabilities
+- `CAMERA`: Photo/video capture
+- `RECORD_AUDIO`: Audio recording, voice wake
+- `SEND_SMS`: SMS features (optional)
+- `REQUEST_INSTALL_PACKAGES`: APK updates (optional)
+
+### Features (optional)
+- `android.hardware.camera`: Not required (software fallback)
+- `android.hardware.telephony`: Not required (software fallback)
+
+Permission flow:
+1. Install app
+2. Launch and navigate to Settings
+3. Grant permissions when prompted:
+   - Notifications (Android 13+)
+   - Nearby devices (Android 13+) or Location (Android 12-)
+4. Grant Camera/Microphone on first use of features
+
+## Build configuration
+
+Gradle build details (apps/android/app/build.gradle.kts):
+
+```kotlin
+android {
+  namespace = "ai.openclaw.android"
+  compileSdk = 36
+  
+  defaultConfig {
+    applicationId = "ai.openclaw.android"
+    minSdk = 31        // Android 12+
+    targetSdk = 36     // Android 15+
+    versionCode = 202602190
+    versionName = "2026.2.19"
+    
+    ndk {
+      // All major ABIs (native libs ~47 KB per ABI)
+      abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+    }
+  }
+  
+  buildTypes {
+    release {
+      isMinifyEnabled = true
+      isShrinkResources = true
+      proguardFiles(...)
+    }
+  }
+}
+```
+
+Key dependencies:
+- Jetpack Compose (UI)
+- CameraX (camera.* parity)
+- OkHttp (WebSocket)
+- dnsjava (unicast DNS-SD)
+- Bouncy Castle (crypto)
+
+## Troubleshooting
+
+### Discovery issues
+
+**Symptom**: No gateways appear in Discovered Gateways list
+
+1. Verify Gateway is advertising:
+```bash
+# On gateway host
+dns-sd -B _openclaw-gw._tcp local.
+```
+
+2. Check Android permissions:
+   - Android 13+: "Nearby devices" permission granted
+   - Android 12-: "Location" permission granted
+
+3. For Tailnet:
+   - Verify DNS-SD zone configured
+   - Check Tailscale split DNS settings
+   - Use Manual Gateway as fallback
+
+### Connection failures
+
+**Symptom**: App shows "Disconnected" or "Pairing required"
+
+1. Verify Gateway is reachable:
+```bash
+# From Android (via adb shell)
+adb shell
+curl http://<gateway-host>:18789
+```
+
+2. Check pairing status:
+```bash
+# On gateway host
+openclaw nodes pending
+openclaw nodes status
+```
+
+3. Reset pairing:
+   - In app Settings, tap "Clear pairing token"
+   - Reconnect and approve new pairing request
+
+### Canvas/Camera commands fail
+
+**Symptom**: Commands return `NODE_BACKGROUND_UNAVAILABLE`
+- Bring Android app to foreground
+- Canvas and Camera require active app
+
+**Symptom**: Camera permission denied
+1. Open Android Settings → Apps → OpenClaw → Permissions
+2. Grant Camera and Microphone permissions
+
+**Symptom**: Canvas shows blank/error
+1. Verify Gateway canvas host configured:
+```bash
+openclaw config get gateway.canvasHost
+```
+2. Test canvas URL in browser:
+```bash
+open http://<gateway-host>:18789/__openclaw__/canvas/
+```
+
+### Foreground service issues
+
+**Symptom**: Service stops unexpectedly
+1. Check battery optimization:
+   - Android Settings → Apps → OpenClaw → Battery
+   - Set to "Unrestricted"
+2. Verify notification permission granted (Android 13+)
+3. Check service status in notification shade
+
+## Related documentation
+
+- [Gateway pairing](/gateway/pairing)
+- [Gateway discovery](/gateway/discovery)
+- [Bonjour setup](/gateway/bonjour)
+- [Node commands](/nodes)
+- [Camera node](/nodes/camera)
+- [Canvas protocol](/nodes/canvas)
+- [Chat integration](/concepts/session)

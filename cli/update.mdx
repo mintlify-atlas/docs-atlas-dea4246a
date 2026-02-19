@@ -1,0 +1,415 @@
+---
+title: "openclaw update"
+description: "Update OpenClaw and inspect update channel status"
+---
+
+# openclaw update
+
+Update OpenClaw to the latest version and manage update channels.
+
+## Usage
+
+```bash
+openclaw update [options]
+```
+
+Or use the shorthand:
+
+```bash
+openclaw --update
+```
+
+## Options
+
+<ParamField path="--channel <name>" type="string">
+  Persist update channel: `stable`, `beta`, or `dev`
+  
+  - `stable`: Tagged releases (recommended)
+  - `beta`: Pre-release versions
+  - `dev`: Latest development branch
+</ParamField>
+
+<ParamField path="--tag <dist-tag|version>" type="string">
+  Override npm dist-tag or version for this update (one-time, not persisted)
+</ParamField>
+
+<ParamField path="--no-restart" type="boolean">
+  Skip restarting the gateway service after a successful update
+</ParamField>
+
+<ParamField path="--timeout <seconds>" type="number">
+  Timeout for each update step in seconds (default: 1200)
+</ParamField>
+
+<ParamField path="--yes" type="boolean">
+  Skip confirmation prompts (non-interactive, accept downgrade prompts)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output result as JSON
+</ParamField>
+
+## Commands
+
+### wizard
+
+Interactive update wizard with guided prompts.
+
+```bash
+openclaw update wizard [options]
+```
+
+<ParamField path="--timeout <seconds>" type="number">
+  Timeout for each update step in seconds (default: 1200)
+</ParamField>
+
+### status
+
+Show update channel and version status.
+
+```bash
+openclaw update status [options]
+```
+
+<ParamField path="--json" type="boolean">
+  Output result as JSON
+</ParamField>
+
+<ParamField path="--timeout <seconds>" type="number">
+  Timeout for update checks in seconds (default: 3)
+</ParamField>
+
+## Update Channels
+
+### stable
+
+Recommended for production use:
+- Tagged releases only (e.g., `v2026.2.19`)
+- npm dist-tag: `latest`
+- Thoroughly tested
+- Includes macOS app releases
+
+```bash
+openclaw update --channel stable
+```
+
+### beta
+
+Early access to new features:
+- Pre-release tags (e.g., `v2026.2.19-beta.1`)
+- npm dist-tag: `beta`
+- Less tested than stable
+- May not include macOS app
+
+```bash
+openclaw update --channel beta
+```
+
+### dev
+
+Latest development code:
+- Moving head on `main` branch
+- No npm dist-tag (git only)
+- Bleeding edge features
+- Requires source checkout
+
+```bash
+openclaw update --channel dev
+```
+
+## Update Process
+
+The update process varies by installation method:
+
+### Git Checkout
+
+For source installations:
+
+1. **Fetch** latest changes from remote
+2. **Rebase** onto target branch/tag
+3. **Install** dependencies (`pnpm install`)
+4. **Build** the project (`pnpm build`)
+5. **Run** diagnostics (`openclaw doctor`)
+6. **Restart** gateway (unless `--no-restart`)
+
+### npm Install
+
+For global npm installations:
+
+1. **Detect** package manager (npm, pnpm, yarn, bun)
+2. **Update** via package manager
+3. **Restart** gateway (unless `--no-restart`)
+
+For Homebrew:
+
+```bash
+brew upgrade openclaw
+```
+
+## Examples
+
+<CodeGroup>
+```bash Basic Updates
+# Update to latest stable
+openclaw update
+
+# Update without restart
+openclaw update --no-restart
+
+# Check for updates
+openclaw update status
+```
+
+```bash Channel Switching
+# Switch to beta channel
+openclaw update --channel beta
+
+# Switch to dev channel
+openclaw update --channel dev
+
+# Switch back to stable
+openclaw update --channel stable
+```
+
+```bash Specific Versions
+# Update to specific npm version
+openclaw update --tag 2026.2.19
+
+# Update to beta dist-tag
+openclaw update --tag beta
+
+# Update to specific prerelease
+openclaw update --tag 2026.2.19-beta.1
+```
+
+```bash Non-Interactive
+# Auto-accept prompts
+openclaw update --yes
+
+# Non-interactive channel switch
+openclaw update --channel beta --yes
+
+# JSON output for scripting
+openclaw update --json
+```
+
+```bash Wizard
+# Interactive update wizard
+openclaw update wizard
+
+# With custom timeout
+openclaw update wizard --timeout 600
+```
+</CodeGroup>
+
+<Warning>
+Downgrades require confirmation (use `--yes` to auto-accept). Downgrading can break configuration compatibility.
+</Warning>
+
+## Channel Persistence
+
+The `--channel` flag persists the channel preference to config:
+
+```json5
+{
+  update: {
+    channel: "beta"
+  }
+}
+```
+
+Subsequent `openclaw update` commands use the saved channel.
+
+The `--tag` flag is **not** persisted (one-time override).
+
+## Update Status
+
+Check update channel and version:
+
+```bash
+openclaw update status
+```
+
+Output:
+
+```
+Update Status
+
+Current version: 2026.2.19
+Update channel: stable
+Source: git
+Branch: main
+Tag: v2026.2.19
+SHA: abc123def
+
+Upstream: origin/main
+Local ahead: 0
+Local behind: 2
+
+Update available: 2026.2.20
+```
+
+JSON output:
+
+```bash
+openclaw update status --json
+```
+
+```json
+{
+  "currentVersion": "2026.2.19",
+  "updateChannel": "stable",
+  "source": "git",
+  "branch": "main",
+  "tag": "v2026.2.19",
+  "sha": "abc123def",
+  "updateAvailable": true,
+  "latestVersion": "2026.2.20"
+}
+```
+
+## Automatic Updates
+
+OpenClaw does **not** auto-update by default.
+
+To enable automatic updates:
+
+### Cron (Linux/macOS)
+
+```bash
+# Daily update check at 3 AM
+0 3 * * * /usr/local/bin/openclaw update --yes --no-restart
+```
+
+### systemd Timer (Linux)
+
+Create `~/.config/systemd/user/openclaw-update.timer`:
+
+```ini
+[Unit]
+Description=OpenClaw Update Timer
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+And `~/.config/systemd/user/openclaw-update.service`:
+
+```ini
+[Unit]
+Description=OpenClaw Update
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/openclaw update --yes
+```
+
+Enable:
+
+```bash
+systemctl --user enable openclaw-update.timer
+systemctl --user start openclaw-update.timer
+```
+
+## Troubleshooting
+
+### Update Fails
+
+1. **Check for uncommitted changes** (git installs):
+   ```bash
+   git status
+   ```
+
+2. **Check network connectivity**:
+   ```bash
+   curl -I https://registry.npmjs.org/openclaw
+   ```
+
+3. **Check disk space**:
+   ```bash
+   df -h
+   ```
+
+4. **Try manual update**:
+   ```bash
+   # Git
+   git pull --rebase
+   pnpm install
+   pnpm build
+   
+   # npm
+   npm update -g openclaw@latest
+   ```
+
+### Downgrade Required
+
+If a config change requires a specific version:
+
+```bash
+# Downgrade to specific version
+openclaw update --tag 2026.2.18 --yes
+```
+
+### Gateway Won't Restart
+
+If the gateway fails to restart after update:
+
+```bash
+# Check status
+openclaw gateway status
+
+# Manual restart
+openclaw gateway restart
+
+# Run diagnostics
+openclaw doctor
+```
+
+### Stuck in Beta/Dev
+
+To return to stable:
+
+```bash
+openclaw update --channel stable
+```
+
+## Update Notifications
+
+The CLI checks for updates periodically and shows a banner:
+
+```
+┌─────────────────────────────┐
+│ Update available: 2026.2.20 │
+│ Run: openclaw update        │
+└─────────────────────────────┘
+```
+
+To disable:
+
+```bash
+openclaw config set update.checkForUpdates false
+```
+
+## Release Notes
+
+View release notes on GitHub:
+
+```bash
+open https://github.com/openclaw/openclaw/releases
+```
+
+Or check the changelog:
+
+```bash
+cat ~/path/to/openclaw/CHANGELOG.md
+```
+
+## Related Commands
+
+- [doctor](/cli/doctor) - Run diagnostics after update
+- [gateway](/cli/gateway) - Restart gateway after update
+- [daemon](/cli/daemon) - Manage gateway service

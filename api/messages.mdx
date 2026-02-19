@@ -1,0 +1,443 @@
+---
+title: "Messages"
+description: "Message format, sending messages, attachments, and media"
+---
+
+# Messages API
+
+The Messages API allows you to send messages via configured messaging channels (Signal, Telegram, Discord, etc.).
+
+## Send Message
+
+Send a message to a recipient via a messaging channel.
+
+### Method: `send`
+
+**Request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 20,
+  "method": "send",
+  "params": {
+    "to": "+1234567890",
+    "message": "Hello from OpenClaw!",
+    "channel": "signal",
+    "idempotencyKey": "unique-key-123"
+  }
+}
+```
+
+<ParamField path="to" type="string" required>
+  Recipient identifier (phone number, user ID, username, etc.)
+</ParamField>
+
+<ParamField path="message" type="string">
+  Text message content (at least one of `message`, `mediaUrl`, or `mediaUrls` required)
+</ParamField>
+
+<ParamField path="channel" type="string">
+  Channel ID (e.g., `"signal"`, `"telegram"`, `"discord"`, `"slack"`)
+</ParamField>
+
+<ParamField path="idempotencyKey" type="string" required>
+  Unique key to prevent duplicate sends
+</ParamField>
+
+<ParamField path="mediaUrl" type="string">
+  Single media attachment URL
+</ParamField>
+
+<ParamField path="mediaUrls" type="array">
+  Array of media attachment URLs
+</ParamField>
+
+<ParamField path="gifPlayback" type="boolean" default={false}>
+  Enable GIF playback (for animated GIFs)
+</ParamField>
+
+<ParamField path="accountId" type="string">
+  Account ID for multi-account channels
+</ParamField>
+
+<ParamField path="threadId" type="string">
+  Thread ID for threaded messages
+</ParamField>
+
+<ParamField path="sessionKey" type="string">
+  Session key for tracking conversation context
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "id": 20,
+  "ok": true,
+  "payload": {
+    "sent": true,
+    "messageId": "msg-123"
+  }
+}
+```
+
+<ResponseField name="sent" type="boolean">
+  Whether the message was sent successfully
+</ResponseField>
+
+<ResponseField name="messageId" type="string">
+  Platform-specific message identifier
+</ResponseField>
+
+<ResponseField name="cached" type="boolean">
+  Whether the response was cached (idempotency)
+</ResponseField>
+
+## Send Message with Media
+
+Send messages with image, video, or document attachments.
+
+### Single Media Attachment
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 21,
+  "method": "send",
+  "params": {
+    "to": "+1234567890",
+    "message": "Check out this image!",
+    "mediaUrl": "https://example.com/image.jpg",
+    "channel": "signal",
+    "idempotencyKey": "unique-key-124"
+  }
+}
+```
+
+### Multiple Media Attachments
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 22,
+  "method": "send",
+  "params": {
+    "to": "+1234567890",
+    "message": "Photo album:",
+    "mediaUrls": [
+      "https://example.com/photo1.jpg",
+      "https://example.com/photo2.jpg",
+      "https://example.com/photo3.jpg"
+    ],
+    "channel": "signal",
+    "idempotencyKey": "unique-key-125"
+  }
+}
+```
+
+### Media-Only Message
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 23,
+  "method": "send",
+  "params": {
+    "to": "+1234567890",
+    "mediaUrl": "https://example.com/document.pdf",
+    "channel": "signal",
+    "idempotencyKey": "unique-key-126"
+  }
+}
+```
+
+## Idempotency
+
+The `idempotencyKey` parameter ensures duplicate messages are not sent:
+
+- Same `idempotencyKey` within a short time window returns cached result
+- Prevents accidental duplicate sends
+- Returns `cached: true` in response metadata
+
+**Example cached response:**
+
+```json
+{
+  "id": 20,
+  "ok": true,
+  "payload": {
+    "sent": true,
+    "messageId": "msg-123"
+  },
+  "meta": {
+    "cached": true
+  }
+}
+```
+
+## Channels
+
+Available channels depend on your configuration:
+
+| Channel | ID | Recipient Format |
+|---------|----|-----------------|
+| Signal | `signal` | Phone number (E.164): `"+1234567890"` |
+| Telegram | `telegram` | User ID or username: `"@username"` |
+| Discord | `discord` | User ID or channel ID |
+| Slack | `slack` | User ID or channel ID: `"#channel"` |
+| WhatsApp | `whatsapp` | Phone number (E.164) |
+| iMessage | `imessage` | Phone number or email |
+
+See [Channels](/channels/overview) for configuration details.
+
+## Message Routing
+
+OpenClaw automatically routes messages based on:
+
+1. **Explicit channel** - Use `channel` parameter
+2. **Session key prefix** - Extract channel from session key (e.g., `"signal:+1234567890"`)
+3. **Default channel** - Use configured default channel
+
+**Example with session key routing:**
+
+```json
+{
+  "method": "send",
+  "params": {
+    "to": "+1234567890",
+    "message": "Hello!",
+    "sessionKey": "signal:+1234567890",
+    "idempotencyKey": "key-127"
+  }
+}
+```
+
+Channel is inferred from `signal:` prefix.
+
+## Polls
+
+Send interactive polls via supported channels.
+
+### Method: `poll`
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 24,
+  "method": "poll",
+  "params": {
+    "to": "+1234567890",
+    "question": "What's your favorite color?",
+    "options": ["Red", "Blue", "Green"],
+    "channel": "signal",
+    "idempotencyKey": "poll-123"
+  }
+}
+```
+
+<ParamField path="question" type="string" required>
+  Poll question
+</ParamField>
+
+<ParamField path="options" type="array" required>
+  Array of poll options (strings)
+</ParamField>
+
+<ParamField path="to" type="string" required>
+  Recipient identifier
+</ParamField>
+
+<ParamField path="channel" type="string">
+  Channel ID
+</ParamField>
+
+<ParamField path="idempotencyKey" type="string" required>
+  Unique key for idempotency
+</ParamField>
+
+<ParamField path="allowMultipleAnswers" type="boolean" default={false}>
+  Allow multiple selections
+</ParamField>
+
+<ParamField path="anonymous" type="boolean" default={false}>
+  Hide voter identities
+</ParamField>
+
+## Error Handling
+
+**Missing recipient:**
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Missing required parameter: to"
+  }
+}
+```
+
+**Channel not configured:**
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "CHANNEL_NOT_FOUND",
+    "message": "Channel 'signal' is not configured"
+  }
+}
+```
+
+**Delivery failed:**
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "DELIVERY_FAILED",
+    "message": "Failed to send message: recipient not found"
+  }
+}
+```
+
+## Example: Send with Media
+
+```bash
+curl -X POST http://localhost:18789/api/send \
+  -H "Authorization: Bearer your-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "send",
+    "params": {
+      "to": "+1234567890",
+      "message": "Check this out!",
+      "mediaUrl": "https://example.com/photo.jpg",
+      "channel": "signal",
+      "idempotencyKey": "msg-'$(date +%s)'"
+    }
+  }'
+```
+
+## Example: JavaScript Client
+
+```javascript
+const ws = new WebSocket('ws://localhost:18789');
+let requestId = 0;
+
+function sendMessage(to, message, channel = 'signal') {
+  const id = ++requestId;
+  const idempotencyKey = `msg-${Date.now()}-${id}`;
+  
+  ws.send(JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    method: "send",
+    params: { to, message, channel, idempotencyKey }
+  }));
+  
+  return id;
+}
+
+ws.on('open', () => {
+  // Authenticate first
+  ws.send(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 0,
+    method: "connect",
+    params: {
+      role: 'control',
+      auth: { token: 'your-token' },
+      client: { name: 'Sender', version: '1.0.0' }
+    }
+  }));
+});
+
+ws.on('message', (data) => {
+  const frame = JSON.parse(data);
+  
+  if (frame.id === 0 && frame.ok) {
+    // Connected - send message
+    sendMessage('+1234567890', 'Hello from WebSocket!');
+  } else if (frame.id > 0) {
+    console.log('Message sent:', frame.payload);
+  }
+});
+```
+
+## Message Format
+
+Messages support basic formatting depending on the channel:
+
+**Markdown (Signal, Telegram, Discord, Slack):**
+
+```
+**bold** _italic_ `code` [link](https://example.com)
+```
+
+**Mentions:**
+
+```
+@username mentioned you!
+```
+
+**Emojis:**
+
+```
+Hello! 👋
+```
+
+Formatting support varies by channel. See individual channel documentation.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always use idempotency keys">
+    Generate unique keys to prevent duplicate sends:
+    
+    ```javascript
+    const idempotencyKey = `msg-${Date.now()}-${Math.random()}`;
+    ```
+  </Accordion>
+  
+  <Accordion title="Validate recipients">
+    Ensure phone numbers are in E.164 format:
+    
+    ```
+    +1234567890  ✓
+    1234567890   ✗
+    (123)456-7890 ✗
+    ```
+  </Accordion>
+  
+  <Accordion title="Handle media URLs correctly">
+    - Use publicly accessible URLs
+    - Ensure HTTPS for secure content
+    - Check file size limits per channel
+  </Accordion>
+  
+  <Accordion title="Check channel status">
+    Verify channel is logged in before sending:
+    
+    ```json
+    {"method": "channels.status", "params": {}}
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Channels" icon="comments" href="/channels/overview">
+    Configure messaging channels
+  </Card>
+  <Card title="Sessions" icon="list" href="/api/sessions">
+    Manage conversation sessions
+  </Card>
+  <Card title="Agent Protocol" icon="robot" href="/api/agent-protocol">
+    Invoke agents to generate responses
+  </Card>
+</CardGroup>

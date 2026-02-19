@@ -1,0 +1,585 @@
+---
+title: Security Guide
+description: Secure your OpenClaw gateway with authentication, allowlists, TLS, and security best practices
+---
+
+# Security Guide
+
+OpenClaw connects to real messaging platforms and executes code. This guide covers essential security practices for protecting your gateway and preventing unauthorized access.
+
+## Security Overview
+
+OpenClaw security model:
+- **Gateway authentication** — Token or password-based access control
+- **DM pairing** — Controlled access for direct messages
+- **Allowlists** — Per-channel sender restrictions
+- **Rate limiting** — Automatic protection against brute-force attacks
+- **TLS/SSL** — Encrypted connections (Tailscale, reverse proxy)
+- **Secrets management** — Secure credential storage
+
+## Gateway Authentication
+
+### Authentication Modes
+
+The gateway supports four authentication modes:
+
+<Tabs>
+  <Tab title="Token (Recommended)">
+    **Token authentication** — Secure, long-lived shared secret.
+    
+    ```bash
+    # Generate secure token
+    openssl rand -hex 32
+    
+    # Configure token
+    openclaw config set gateway.auth.mode token
+    openclaw config set gateway.auth.token "your-secure-token-here"
+    
+    # Or via environment
+    export OPENCLAW_GATEWAY_TOKEN="your-secure-token-here"
+    openclaw gateway
+    ```
+    
+    **Token source priority:**
+    1. `OPENCLAW_GATEWAY_TOKEN` environment variable
+    2. `gateway.auth.token` in config
+    
+    See `src/gateway/auth.ts:216`
+  </Tab>
+  
+  <Tab title="Password">
+    **Password authentication** — User-friendly, configurable via wizard.
+    
+    ```bash
+    # Set password via wizard
+    openclaw configure
+    
+    # Or directly
+    openclaw config set gateway.auth.mode password
+    openclaw config set gateway.auth.password "your-secure-password"
+    
+    # Or via environment
+    export OPENCLAW_GATEWAY_PASSWORD="your-password"
+    openclaw gateway
+    ```
+  </Tab>
+  
+  <Tab title="Trusted Proxy">
+    **Trusted proxy mode** — For reverse proxies that handle authentication.
+    
+    ```yaml
+    # ~/.openclaw/config.json
+    gateway:
+      auth:
+        mode: trusted-proxy
+        trustedProxy:
+          userHeader: X-Forwarded-User
+          requiredHeaders:
+            - X-Forwarded-Proto
+            - X-Forwarded-For
+          allowUsers:
+            - user@example.com
+            - admin
+    ```
+    
+    Configure trusted proxy IPs in `gateway.trustedProxies`:
+    ```bash
+    openclaw config set gateway.trustedProxies '["127.0.0.1", "::1"]'
+    ```
+    
+    See `src/gateway/auth.ts:279-320`
+  </Tab>
+  
+  <Tab title="None (Development Only)">
+    **No authentication** — Only for local development.
+    
+    <Warning>
+    Never use `mode: none` with network binding (`lan`, `tailnet`). Anyone on your network can fully control your gateway.
+    </Warning>
+    
+    ```bash
+    # Local development only
+    openclaw config set gateway.auth.mode none
+    openclaw gateway --bind loopback
+    ```
+  </Tab>
+</Tabs>
+
+### Rate Limiting
+
+Automatic protection against brute-force attacks:
+
+```typescript
+// From src/gateway/auth-rate-limit.ts
+const DEFAULT_MAX_ATTEMPTS = 10;       // Max failed attempts
+const DEFAULT_WINDOW_MS = 60_000;      // 1 minute window
+const DEFAULT_LOCKOUT_MS = 300_000;    // 5 minute lockout
+```
+
+**Features:**
+- Tracks failed auth attempts by client IP
+- Automatic lockout after 10 failed attempts
+- 5-minute cooldown period
+- Loopback (localhost) is exempt by default
+
+**Configuration:**
+
+```yaml
+# ~/.openclaw/config.json
+gateway:
+  auth:
+    rateLimit:
+      maxAttempts: 10
+      windowMs: 60000
+      lockoutMs: 300000
+      exemptLoopback: true
+```
+
+## DM Pairing and Allowlists
+
+### DM Policy Modes
+
+Control who can send direct messages:
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `pairing` | Unknown senders get pairing code | **Recommended** — Controlled access |
+| `locked` | Only allowlist senders allowed | High security, pre-approved users |
+| `open` | Anyone can send DMs | **Dangerous** — Public access |
+| `disabled` | DMs completely disabled | Channel-only communication |
+
+### Pairing Flow
+
+**Default behavior** (recommended):
+
+```yaml
+# ~/.openclaw/config.json
+channels:
+  discord:
+    dmPolicy: pairing  # Default
+  telegram:
+    dmPolicy: pairing
+  whatsapp:
+    dmPolicy: pairing
+```
+
+When an unknown user sends a DM:
+1. Gateway generates a pairing code (e.g., `ABC123`)
+2. User receives: "Pairing required. Code: ABC123"
+3. Approve with: `openclaw pairing approve discord ABC123`
+4. User is added to allowlist store
+
+**Approve a sender:**
+
+```bash
+# Approve pairing code
+openclaw pairing approve discord ABC123
+openclaw pairing approve telegram XYZ789
+
+# List pending pairing requests
+openclaw pairing list
+
+# Revoke access
+openclaw pairing revoke discord user@example.com
+```
+
+### Allowlist Configuration
+
+**Per-channel allowlists:**
+
+```yaml
+# ~/.openclaw/config.json
+channels:
+  discord:
+    dmPolicy: locked
+    allowFrom:
+      - "user#1234"
+      - "admin#5678"
+  
+  telegram:
+    dmPolicy: locked
+    allowFrom:
+      - 123456789  # User ID
+      - 987654321
+  
+  whatsapp:
+    dmPolicy: locked
+    allowFrom:
+      - "+1234567890"
+```
+
+**Open DM policy** (dangerous):
+
+<Warning>
+`dmPolicy: open` allows **anyone** to send DMs. Only use this if you fully understand the risks.
+</Warning>
+
+```yaml
+channels:
+  discord:
+    dmPolicy: open
+    allowFrom:
+      - "*"  # Required for open policy
+```
+
+### Multi-User Session Isolation
+
+By default, all DM senders share the `main` session. Isolate sessions per sender:
+
+```bash
+# Isolate per sender
+openclaw config set session.dmScope per-channel-peer
+
+# Isolate per account + sender (multi-account channels)
+openclaw config set session.dmScope per-account-channel-peer
+```
+
+See `src/commands/doctor-security.ts:116-122` for warnings about shared sessions.
+
+## Network Security
+
+### Gateway Bind Modes
+
+| Mode | Binds To | Security |
+|------|----------|----------|
+| `loopback` | `127.0.0.1` | ✅ **Recommended** — Local only |
+| `lan` | `0.0.0.0` | ⚠️ **Requires auth** — Network accessible |
+| `tailnet` | Tailscale IP | ✅ **Recommended** — Secure remote access |
+| `custom` | User-specified | ⚠️ Varies |
+
+**Local-only (most secure):**
+
+```bash
+openclaw config set gateway.bind loopback
+openclaw gateway
+```
+
+**LAN access (requires strong auth):**
+
+```bash
+openclaw config set gateway.bind lan
+openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+openclaw gateway
+```
+
+**Tailscale (recommended for remote access):**
+
+```bash
+# Install Tailscale
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# Configure OpenClaw
+openclaw config set gateway.bind tailnet
+openclaw config set gateway.tailscale.mode serve
+openclaw gateway
+```
+
+### TLS/SSL Setup
+
+#### Option 1: Tailscale (Recommended)
+
+Tailscale provides automatic TLS with built-in authentication:
+
+```bash
+# Enable Tailscale Serve
+tailscale serve https:443 http://127.0.0.1:18789
+
+# Configure gateway
+openclaw config set gateway.tailscale.mode serve
+openclaw config set gateway.auth.allowTailscale true
+```
+
+**Tailscale authentication verification:**
+
+From `src/gateway/auth.ts:153-184`:
+- Verifies `Tailscale-User-Login` header
+- Validates via `tailscale whois` lookup
+- Matches login against IP ownership
+
+#### Option 2: Reverse Proxy (Nginx)
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name gateway.example.com;
+    
+    ssl_certificate /etc/letsencrypt/live/gateway.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gateway.example.com/privkey.pem;
+    
+    location / {
+        proxy_pass http://127.0.0.1:18789;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+#### Option 3: Cloudflare Tunnel
+
+```bash
+# Install cloudflared
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+sudo mv cloudflared /usr/local/bin/
+sudo chmod +x /usr/local/bin/cloudflared
+
+# Authenticate
+cloudflared tunnel login
+
+# Create tunnel
+cloudflared tunnel create openclaw-gateway
+
+# Route domain
+cloudflared tunnel route dns openclaw-gateway gateway.example.com
+
+# Run tunnel
+cloudflared tunnel run --url http://localhost:18789 openclaw-gateway
+```
+
+## Secrets Management
+
+### Credential Storage
+
+OpenClaw stores credentials in:
+
+```bash
+~/.openclaw/credentials/
+├── anthropic-oauth.json      # Claude OAuth tokens
+├── openai-oauth.json         # OpenAI OAuth tokens
+└── web-provider/             # Web provider sessions
+    ├── claude-session.json
+    └── cookie-jar.json
+```
+
+**File permissions:**
+
+```bash
+# Ensure restrictive permissions
+chmod 700 ~/.openclaw
+chmod 600 ~/.openclaw/credentials/*
+
+# Verify permissions
+ls -la ~/.openclaw/credentials/
+```
+
+### Environment Variables
+
+**Avoid committing secrets:**
+
+```bash
+# .env (add to .gitignore)
+OPENCLAW_GATEWAY_TOKEN=your-secret-token
+CLAUDE_AI_SESSION_KEY=sk-ant-...
+OPENAI_API_KEY=sk-proj-...
+```
+
+**Load environment file:**
+
+```bash
+# With systemd
+[Service]
+EnvironmentFile=/home/user/.openclaw/.env
+
+# With Docker Compose
+env_file:
+  - .env
+```
+
+### Rotating Credentials
+
+```bash
+# Generate new token
+openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+
+# Update all clients
+openclaw gateway restart
+
+# Re-login to providers
+openclaw login anthropic
+openclaw login openai
+```
+
+## Security Auditing
+
+### Run Security Audit
+
+```bash
+# Basic audit
+openclaw security audit
+
+# Deep probe (includes gateway health check)
+openclaw security audit --deep
+
+# Apply automatic fixes
+openclaw security audit --fix
+
+# JSON output
+openclaw security audit --json
+```
+
+**Audit checks:**
+- Gateway authentication configuration
+- DM policy security
+- Channel allowlist completeness
+- File permissions on state directory
+- Network exposure risks
+- Credential storage security
+
+From `src/cli/security-cli.ts` and `src/commands/doctor-security.ts`.
+
+### Doctor Security Checks
+
+```bash
+# Comprehensive health + security check
+openclaw doctor
+
+# Auto-fix issues
+openclaw doctor --fix
+
+# Generate gateway token if missing
+openclaw doctor --generate-gateway-token
+```
+
+**Doctor security warnings** (from `src/commands/doctor-security.ts`):
+- Gateway bound to network without auth
+- Open DM policies
+- Multi-user sessions sharing `main` scope
+- Missing allowlists
+- Weak authentication
+
+## Security Checklist
+
+<Steps>
+  <Step title="Enable strong authentication">
+    ```bash
+    openclaw config set gateway.auth.mode token
+    openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+    ```
+  </Step>
+  
+  <Step title="Use DM pairing">
+    ```bash
+    openclaw config set channels.discord.dmPolicy pairing
+    openclaw config set channels.telegram.dmPolicy pairing
+    ```
+  </Step>
+  
+  <Step title="Isolate user sessions">
+    ```bash
+    openclaw config set session.dmScope per-channel-peer
+    ```
+  </Step>
+  
+  <Step title="Restrict network binding">
+    ```bash
+    # Local only
+    openclaw config set gateway.bind loopback
+    
+    # Or use Tailscale
+    openclaw config set gateway.bind tailnet
+    ```
+  </Step>
+  
+  <Step title="Secure credential storage">
+    ```bash
+    chmod 700 ~/.openclaw
+    chmod 600 ~/.openclaw/config.json
+    chmod -R 600 ~/.openclaw/credentials/
+    ```
+  </Step>
+  
+  <Step title="Run security audit">
+    ```bash
+    openclaw security audit --deep
+    ```
+  </Step>
+  
+  <Step title="Enable rate limiting (default on)">
+    Verify rate limiting is active:
+    ```bash
+    openclaw config get gateway.auth.rateLimit
+    ```
+  </Step>
+  
+  <Step title="Use TLS for remote access">
+    Set up Tailscale or reverse proxy with Let's Encrypt
+  </Step>
+</Steps>
+
+## Common Security Issues
+
+<AccordionGroup>
+  <Accordion title="Gateway exposed without authentication">
+    **Problem:** Gateway bound to `0.0.0.0` (LAN) without token/password.
+    
+    **Fix:**
+    ```bash
+    # Set token
+    openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+    
+    # Or bind to loopback
+    openclaw config set gateway.bind loopback
+    ```
+  </Accordion>
+  
+  <Accordion title="Open DM policy misconfigured">
+    **Problem:** `dmPolicy: open` without `allowFrom: ["*"]`.
+    
+    **Fix:**
+    ```bash
+    # Switch to pairing
+    openclaw config set channels.discord.dmPolicy pairing
+    ```
+  </Accordion>
+  
+  <Accordion title="Shared sessions for multiple users">
+    **Problem:** Multiple DM senders sharing the `main` session.
+    
+    **Fix:**
+    ```bash
+    openclaw config set session.dmScope per-channel-peer
+    ```
+  </Accordion>
+  
+  <Accordion title="Weak or default tokens">
+    **Problem:** Short or predictable authentication tokens.
+    
+    **Fix:**
+    ```bash
+    # Generate strong token (64 hex chars = 256 bits)
+    openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+    ```
+  </Accordion>
+  
+  <Accordion title="Insecure file permissions">
+    **Problem:** Config/credentials readable by other users.
+    
+    **Fix:**
+    ```bash
+    chmod 700 ~/.openclaw
+    chmod 600 ~/.openclaw/config.json
+    chmod -R 600 ~/.openclaw/credentials/
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment Guide" icon="cloud" href="/guides/deployment">
+    Deploy with security best practices
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Debug authentication and security issues
+  </Card>
+  <Card title="Multi-Agent Setup" icon="users" href="/guides/multi-agent">
+    Isolate agents with allowlists
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/security">
+    Security audit command reference
+  </Card>
+</CardGroup>

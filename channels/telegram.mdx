@@ -1,0 +1,396 @@
+---
+title: Telegram Channel
+description: Connect OpenClaw to Telegram using a bot token from @BotFather
+---
+
+Telegram is one of the easiest channels to set up with OpenClaw. You create a bot via [@BotFather](https://t.me/botfather), get a token, and configure OpenClaw to use it. Telegram supports DMs, groups, channels, threads, commands, inline buttons, and rich media.
+
+## Quick Start
+
+The fastest way to set up Telegram is with the interactive onboarding:
+
+```bash
+openclaw init
+```
+
+Select Telegram and follow the prompts to enter your bot token.
+
+## Creating a Telegram Bot
+
+<Steps>
+  <Step title="Chat with @BotFather">
+    Open Telegram and search for [@BotFather](https://t.me/botfather). This is Telegram's official bot for creating and managing bots.
+  </Step>
+
+  <Step title="Create a new bot">
+    Send `/newbot` to @BotFather and follow the prompts:
+    - Choose a display name (e.g., "OpenClaw Bot")
+    - Choose a username (must end in `bot`, e.g., `openclawbot` or `my_openclaw_bot`)
+  </Step>
+
+  <Step title="Copy your bot token">
+    @BotFather will give you a token that looks like:
+
+    ```
+    123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+    ```
+
+    Save this token securely. You'll need it for configuration.
+  </Step>
+
+  <Step title="Configure bot settings (optional)">
+    You can customize your bot with @BotFather:
+    - `/setdescription` - Set bot description
+    - `/setabouttext` - Set "About" text
+    - `/setuserpic` - Upload a profile picture
+    - `/setcommands` - Set bot commands menu
+  </Step>
+</Steps>
+
+## Configuration
+
+### Using Environment Variables
+
+The simplest way to configure Telegram:
+
+```bash
+export TELEGRAM_BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+```
+
+Then enable in config:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### Using Config File
+
+Alternatively, store the token directly in `openclaw.config.json`:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
+      "dmPolicy": "pairing",
+      "allowFrom": []
+    }
+  }
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable Telegram channel |
+| `botToken` | string | - | Bot token from @BotFather (or use `TELEGRAM_BOT_TOKEN` env var) |
+| `dmPolicy` | string | `"pairing"` | DM access policy: `pairing`, `allowlist`, `open`, `disabled` |
+| `allowFrom` | string[] | `[]` | Telegram user IDs allowed to message (e.g., `["123456789"]`) |
+| `groupPolicy` | string | `"allowlist"` | Group access policy: `allowlist`, `open`, `disabled` |
+
+### DM Policies
+
+- **`pairing`** (recommended): Unknown users get a pairing code; approve with `openclaw pairing approve telegram <userId>`
+- **`allowlist`**: Only user IDs in `allowFrom` can DM the bot
+- **`open`**: Anyone can DM the bot (set `allowFrom: ["*"]`)
+- **`disabled`**: Ignore all Telegram DMs
+
+### Getting Your Telegram User ID
+
+To allowlist yourself, you need your Telegram user ID (a numeric ID, not your username).
+
+**Method 1: Check logs (safest)**
+
+1. DM your bot on Telegram
+2. Run `openclaw logs --follow`
+3. Look for a line like:
+   ```
+   Telegram DM from user_id=123456789 username=@yourname
+   ```
+
+**Method 2: Use @userinfobot**
+
+Forward any message to [@userinfobot](https://t.me/userinfobot) and it will reply with your user ID.
+
+**Method 3: Use Telegram API directly**
+
+```bash
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates"
+```
+
+Look for `"from":{"id":123456789}` in the JSON response.
+
+### Resolving Usernames to IDs
+
+OpenClaw can resolve `@username` to a user ID automatically:
+
+```bash
+openclaw channels resolve telegram @username
+```
+
+This will output the numeric user ID you can add to `allowFrom`.
+
+## Group Configuration
+
+To use your bot in Telegram groups:
+
+<Steps>
+  <Step title="Add bot to group">
+    1. Open the group in Telegram
+    2. Tap the group name → "Add Members"
+    3. Search for your bot's username and add it
+  </Step>
+
+  <Step title="Give bot permissions (optional)">
+    Make your bot an admin if you want it to:
+    - Pin/unpin messages
+    - Delete messages
+    - Read all messages (even without @mentions)
+  </Step>
+
+  <Step title="Configure group policy">
+    Set group policy to `allowlist` and specify allowed groups:
+
+    ```json
+    {
+      "channels": {
+        "telegram": {
+          "groupPolicy": "allowlist",
+          "groups": {
+            "-123456789": {
+              "requireMention": true,
+              "allowFrom": ["user-id-1", "user-id-2"],
+              "toolPolicy": "allowlist"
+            }
+          }
+        }
+      }
+    }
+    ```
+
+    Get the group ID with:
+
+    ```bash
+    openclaw channels list telegram
+    ```
+  </Step>
+</Steps>
+
+### Group Options
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `requireMention` | boolean | `false` | Only respond when bot is @mentioned |
+| `allowFrom` | string[] | `[]` | User IDs allowed to use the bot in this group |
+| `toolPolicy` | string | `"open"` | Tool usage policy: `open`, `allowlist`, `disabled` |
+
+## Commands Support
+
+Telegram supports native bot commands. Set up commands with @BotFather:
+
+```
+/setcommands
+
+# Example commands:
+help - Show help message
+status - Check bot status
+reset - Reset conversation
+```
+
+OpenClaw will automatically handle these commands if you configure them in your agent.
+
+## Threads Support
+
+Telegram supergroups support topics (threads). OpenClaw automatically detects and maintains thread context:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "groups": {
+        "-123456789": {
+          "threads": {
+            "5": {
+              "enabled": true,
+              "requireMention": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Inline Buttons
+
+Telegram supports interactive inline buttons. OpenClaw can render buttons in responses:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "inlineButtons": {
+        "enabled": true
+      }
+    }
+  }
+}
+```
+
+Buttons are rendered when your agent includes action items in responses.
+
+## Media Handling
+
+Telegram supports:
+- Photos (up to 10MB)
+- Videos (up to 50MB)
+- Audio files
+- Voice messages
+- Documents (up to 50MB)
+- Stickers
+- GIFs
+
+OpenClaw automatically processes media attachments.
+
+## Multi-Account Support
+
+You can run multiple Telegram bots:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "accounts": {
+        "work": {
+          "enabled": true,
+          "botToken": "work-bot-token",
+          "allowFrom": ["work-user-id"]
+        },
+        "personal": {
+          "enabled": true,
+          "botToken": "personal-bot-token",
+          "allowFrom": ["personal-user-id"]
+        }
+      }
+    }
+  }
+}
+```
+
+Verify both are running:
+
+```bash
+openclaw channels status --probe
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Bot not responding to messages">
+    Check that:
+    - Bot token is correct
+    - Your user ID is in `allowFrom` (or `dmPolicy` is `pairing` or `open`)
+    - Channel is enabled and gateway is running
+
+    Verify:
+
+    ```bash
+    openclaw channels status --probe
+    ```
+  </Accordion>
+
+  <Accordion title="Bot can't see group messages">
+    Telegram bots have privacy mode enabled by default, which means they only see:
+    - Messages that @mention the bot
+    - Messages that are replies to the bot
+    - Commands (messages starting with `/`)
+
+    To disable privacy mode:
+    1. Chat with @BotFather
+    2. Send `/setprivacy`
+    3. Select your bot
+    4. Choose "Disable"
+
+    Alternatively, make your bot a group admin.
+  </Accordion>
+
+  <Accordion title="Invalid token error">
+    Double-check your bot token. It should look like:
+
+    ```
+    123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+    ```
+
+    Test it manually:
+
+    ```bash
+    curl "https://api.telegram.org/bot<YOUR_TOKEN>/getMe"
+    ```
+
+    If this returns an error, the token is invalid. Get a new token from @BotFather with `/token`.
+  </Accordion>
+
+  <Accordion title="Pairing codes not working">
+    Ensure `dmPolicy` is set to `"pairing"`:
+
+    ```json
+    {
+      "channels": {
+        "telegram": {
+          "dmPolicy": "pairing"
+        }
+      }
+    }
+    ```
+
+    Approve users with:
+
+    ```bash
+    openclaw pairing approve telegram 123456789
+    ```
+  </Accordion>
+
+  <Accordion title="Username resolution not working">
+    Username resolution requires a valid bot token. Ensure:
+    - Token is configured correctly
+    - Bot has been started at least once
+    - Username is spelled correctly (including `@`)
+
+    Fallback to numeric user ID if resolution fails.
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+- **Keep your bot token secret** - it gives full access to your bot
+- **Use environment variables** instead of committing tokens to version control
+- **Use allowlist mode** for production bots with known users
+- **Disable inline buttons** if you don't need them to reduce attack surface
+- **Rate limit** is handled by Telegram (30 messages/second to different chats)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Pairing Guide" icon="qrcode" href="/channels/pairing">
+    Learn about pairing codes and approvals
+  </Card>
+  
+  <Card title="Discord Setup" icon="discord" href="/channels/discord">
+    Set up Discord as another channel
+  </Card>
+  
+  <Card title="Configuration Reference" icon="gear" href="/configuration">
+    Full configuration options
+  </Card>
+  
+  <Card title="Commands" icon="terminal" href="/cli/channels">
+    Manage channels with the CLI
+  </Card>
+</CardGroup>

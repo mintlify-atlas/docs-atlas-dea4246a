@@ -1,0 +1,272 @@
+---
+title: macOS App
+summary: macOS menubar companion app with bundled gateway, voice wake, and Canvas support
+---
+
+# macOS App
+
+The OpenClaw macOS app is a **menubar companion** that manages the Gateway, handles permissions, and exposes macOS capabilities as a node.
+
+## Features
+
+- **Menu bar integration**: Native notifications and status indicator
+- **Bundled Gateway**: Runs the Gateway locally via LaunchAgent or connects to remote instances
+- **Voice wake**: Hands-free "Hey OpenClaw" activation with local speech recognition
+- **Canvas**: WebView-based UI automation and screen rendering
+- **System integration**: Camera, screen recording, AppleScript automation
+- **Permission management**: Handles all TCC prompts (Notifications, Accessibility, Screen Recording, Microphone, Speech Recognition)
+- **Remote mode**: Connect to remote Gateway over SSH/Tailscale while exposing local node capabilities
+
+## Installation
+
+### Download from releases
+
+1. Download `OpenClaw-YYYY.M.D.zip` from [GitHub Releases](https://github.com/openclaw/openclaw/releases)
+2. Extract and move `OpenClaw.app` to `/Applications`
+3. Launch the app (right-click → Open on first launch to bypass Gatekeeper)
+4. Complete the permissions checklist when prompted
+
+### Build from source
+
+Requirements:
+- Xcode 16+
+- Node.js 22+
+- pnpm
+
+```bash
+# From repository root
+pnpm install
+
+# Package the app (creates dist/OpenClaw.app)
+scripts/package-mac-app.sh
+
+# Or quick dev run (fastest, ad-hoc signing)
+scripts/restart-mac.sh --no-sign
+```
+
+Dev run options:
+- `--no-sign`: Fastest dev mode with ad-hoc signing (TCC permissions don't persist)
+- `--sign`: Force code signing with available certificate
+
+For development workflow details, see [macOS dev setup](/platforms/mac/dev-setup).
+
+## Gateway modes
+
+### Local mode (default)
+
+The app manages a local Gateway via LaunchAgent:
+- Label: `bot.molt.gateway` (or `bot.molt.<profile>` when using profiles)
+- The app enables the service via `openclaw gateway install` if not present
+- Start/stop/restart via app menu or:
+
+```bash
+launchctl kickstart -k gui/$UID/bot.molt.gateway
+launchctl bootout gui/$UID/bot.molt.gateway
+```
+
+### Remote mode
+
+Connect to a remote Gateway over SSH/Tailscale:
+- The app connects to remote Gateway WebSocket
+- Local **node host service** runs to expose macOS capabilities to remote Gateway
+- SSH tunnel handles WebSocket port forwarding (default 18789)
+- Voice wake commands forward to remote Gateway
+
+See [macOS remote access](/platforms/mac/remote) for setup details.
+
+## Voice wake
+
+"Hey OpenClaw" hands-free activation:
+- Uses on-device speech recognition (no network required)
+- Configurable wake words and forwarding patterns
+- Commands forwarded to CLI: `openclaw-mac agent --message "${text}" --thinking low`
+- Replies delivered to last active channel (WhatsApp/Telegram/Discord/WebChat)
+
+Configuration in Settings → Voice Wake:
+- Enable/disable wake detection
+- Customize wake word phrases
+- Set command forwarding template
+- Test wake detection
+
+See [macOS Voice Wake](/platforms/mac/voicewake) for implementation details.
+
+## Canvas support
+
+The macOS app exposes Canvas via WKWebView:
+- Commands: `canvas.present`, `canvas.navigate`, `canvas.eval`, `canvas.snapshot`, `canvas.a2ui.*`
+- Serves content from Gateway at `http://localhost:18789/__openclaw__/canvas/`
+- Supports A2UI (agent-to-UI) protocol for dynamic interfaces
+- Live reload when workspace files change
+
+Example:
+```bash
+# Navigate to canvas workspace
+openclaw nodes invoke --node "mac" --command canvas.navigate --params '{"url":"http://localhost:18789/__openclaw__/canvas/"}'
+
+# Evaluate JavaScript
+openclaw nodes invoke --node "mac" --command canvas.eval --params '{"javaScript":"document.body.style.background='blue'"}'
+
+# Take snapshot
+openclaw nodes invoke --node "mac" --command canvas.snapshot --params '{"format":"jpeg","maxWidth":1200}'
+```
+
+See [macOS Canvas](/platforms/mac/canvas) for full API.
+
+## Node capabilities
+
+The macOS app registers as a node with these commands:
+
+- **Canvas**: `canvas.present`, `canvas.navigate`, `canvas.eval`, `canvas.snapshot`, `canvas.a2ui.*`
+- **Camera**: `camera.snap`, `camera.clip`
+- **Screen**: `screen.record`
+- **System**: `system.run` (controlled by exec approvals), `system.notify`
+
+The node reports a `permissions` map so agents can check what's allowed before invoking.
+
+## Permissions
+
+Required TCC permissions:
+- **Notifications**: For agent alerts and responses
+- **Accessibility**: For `system.run` AppleScript automation
+- **Screen Recording**: For screen capture and Canvas screenshots
+- **Microphone**: For voice wake and talk mode
+- **Speech Recognition**: For voice wake processing
+
+The app Settings shows permission status and provides direct links to System Settings.
+
+See [macOS Permissions](/platforms/mac/permissions) for troubleshooting.
+
+## Exec approvals (system.run)
+
+`system.run` is gated by **Exec approvals** (Settings → Exec approvals):
+
+- **Security modes**: `deny`, `allowlist`, `ask`, `allow`
+- **Ask policy**: `never`, `on-miss`, `always`
+- **Allowlist**: Glob patterns for approved binary paths
+- Stored locally: `~/.openclaw/exec-approvals.json`
+
+Example config:
+```json
+{
+  "version": 1,
+  "defaults": {
+    "security": "deny",
+    "ask": "on-miss"
+  },
+  "agents": {
+    "main": {
+      "security": "allowlist",
+      "ask": "on-miss",
+      "allowlist": [{"pattern": "/opt/homebrew/bin/*"}]
+    }
+  }
+}
+```
+
+When a prompt appears, choosing "Always Allow" adds the command to the allowlist.
+
+## Deep links
+
+The app registers `openclaw://` URL scheme:
+
+### `openclaw://agent`
+
+Trigger agent requests from anywhere:
+
+```bash
+open 'openclaw://agent?message=What%20is%20the%20weather'
+```
+
+Query parameters:
+- `message` (required): The message to send
+- `sessionKey` (optional): Target session
+- `thinking` (optional): Thinking level
+- `deliver`/`to`/`channel` (optional): Delivery target
+- `key` (optional): Unattended mode key (skips confirmation prompt)
+
+Safety:
+- Without `key`: Prompts for confirmation and limits message length
+- With valid `key`: Runs unattended (for personal automations)
+
+## Troubleshooting
+
+### Gateway won't start
+
+1. Check LaunchAgent status:
+```bash
+launchctl print gui/$UID/bot.molt.gateway
+```
+
+2. View logs:
+```bash
+./scripts/clawlog.sh --last 5m
+```
+
+3. Reinstall service:
+```bash
+openclaw gateway install
+```
+
+### Voice wake not working
+
+1. Verify permissions: Settings → Privacy & Security → Speech Recognition
+2. Enable "Discovery Debug Logs" in app Settings → Voice Wake
+3. Check logs for wake detection events:
+```bash
+./scripts/clawlog.sh --category VoiceWake --last 10m
+```
+
+### Canvas commands fail
+
+1. Ensure Canvas window is visible (bring to front)
+2. Check Screen Recording permission
+3. Verify Gateway canvas host is configured:
+```bash
+openclaw config get gateway.canvasHost
+```
+
+### Remote mode connection issues
+
+1. Test SSH connectivity:
+```bash
+ssh user@gateway-host 'echo ok'
+```
+
+2. Verify Gateway is listening:
+```bash
+ssh user@gateway-host 'ss -ltnp | grep 18789'
+```
+
+3. Check tunnel status in app Settings → Gateway → Connection Status
+
+See [macOS troubleshooting](/platforms/mac/health) for more diagnostics.
+
+## Logging
+
+View macOS app logs:
+
+```bash
+# Last 5 minutes, all categories
+./scripts/clawlog.sh --last 5m
+
+# Specific category
+./scripts/clawlog.sh --category WebChat --last 10m
+
+# Follow live logs
+./scripts/clawlog.sh --follow
+```
+
+Log subsystem: `bot.molt`
+Categories: `GatewayDiag`, `WebChatSwiftUI`, `VoiceWake`, `Canvas`, `PermissionManager`
+
+See [macOS Logging](/platforms/mac/logging) for filtering options.
+
+## Related documentation
+
+- [Gateway runbook](/gateway)
+- [Gateway (macOS)](/platforms/mac/bundled-gateway)
+- [macOS Permissions](/platforms/mac/permissions)
+- [Canvas](/platforms/mac/canvas)
+- [Voice Wake](/platforms/mac/voicewake)
+- [Remote access](/platforms/mac/remote)
+- [Release process](/platforms/mac/release)

@@ -1,0 +1,450 @@
+---
+title: "Plugin SDK Reference"
+description: "Complete reference for the OpenClaw Plugin SDK"
+---
+
+The Plugin SDK provides APIs for registering channels, tools, hooks, services, and HTTP handlers. Import from `openclaw/plugin-sdk`:
+
+```typescript
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+```
+
+## Plugin API
+
+The `OpenClawPluginApi` is passed to your plugin's `register` and `activate` functions.
+
+### Properties
+
+<ResponseField name="id" type="string">
+  Plugin identifier (e.g., `"matrix"`, `"my-plugin"`)
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Plugin display name
+</ResponseField>
+
+<ResponseField name="version" type="string" optional>
+  Plugin version from package.json
+</ResponseField>
+
+<ResponseField name="description" type="string" optional>
+  Plugin description
+</ResponseField>
+
+<ResponseField name="source" type="string">
+  Absolute path to the plugin entry point
+</ResponseField>
+
+<ResponseField name="config" type="OpenClawConfig">
+  OpenClaw configuration object. Access via `api.config.channels`, `api.config.agents`, etc.
+</ResponseField>
+
+<ResponseField name="pluginConfig" type="Record<string, unknown>" optional>
+  Plugin-specific configuration from `config.json` under `plugins.entries[id].config`
+</ResponseField>
+
+<ResponseField name="runtime" type="PluginRuntime">
+  Runtime services for media, messaging, logging, and more. See [Runtime Services](#runtime-services).
+</ResponseField>
+
+<ResponseField name="logger" type="PluginLogger">
+  Scoped logger for plugin messages:
+  
+  ```typescript
+  api.logger.info("Plugin started");
+  api.logger.warn("Deprecation warning");
+  api.logger.error("Operation failed");
+  api.logger.debug?.("Verbose output");
+  ```
+</ResponseField>
+
+### Registration Methods
+
+<ResponseField name="registerTool" type="(tool: AnyAgentTool | OpenClawPluginToolFactory, opts?: OpenClawPluginToolOptions) => void">
+  Register an agent tool. Tools are exposed to the LLM and can be called during agent runs.
+
+  ```typescript
+  api.registerTool(createMyTool());
+  api.registerTool(createMyTool(), { optional: true });
+  api.registerTool(toolFactory, { names: ["tool1", "tool2"] });
+  ```
+
+  **Options:**
+  - `name?: string` - Tool name override
+  - `names?: string[]` - Multiple tool names (for tool factories)
+  - `optional?: boolean` - Require explicit allowlisting in agent config
+</ResponseField>
+
+<ResponseField name="registerHook" type="(events: string | string[], handler: InternalHookHandler, opts?: OpenClawPluginHookOptions) => void">
+  Register a lifecycle hook. Hooks intercept events at key points in the message lifecycle.
+
+  ```typescript
+  api.registerHook("llm_input", async (event, ctx) => {
+    api.logger.info(`LLM call: ${event.provider}/${event.model}`);
+  });
+
+  api.registerHook(["message_received", "message_sent"], handler);
+  ```
+
+  See [Hooks](/plugins/hooks) for available events.
+</ResponseField>
+
+<ResponseField name="registerChannel" type="(registration: OpenClawPluginChannelRegistration | ChannelPlugin) => void">
+  Register a channel plugin. Channel plugins integrate messaging platforms.
+
+  ```typescript
+  api.registerChannel({ plugin: myChannelPlugin });
+  ```
+
+  See [Channels](/plugins/channels) for details.
+</ResponseField>
+
+<ResponseField name="registerService" type="(service: OpenClawPluginService) => void">
+  Register a background service. Services run persistent background tasks.
+
+  ```typescript
+  api.registerService({
+    id: "my-service",
+    start: async (ctx) => {
+      // Start background task
+    },
+    stop: async (ctx) => {
+      // Clean up
+    }
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="registerHttpRoute" type="(params: { path: string; handler: OpenClawPluginHttpRouteHandler }) => void">
+  Register an HTTP route for webhooks or custom endpoints.
+
+  ```typescript
+  api.registerHttpRoute({
+    path: "/webhook/my-plugin",
+    handler: async (req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    }
+  });
+  ```
+
+  Routes are automatically normalized to prevent conflicts.
+</ResponseField>
+
+<ResponseField name="registerHttpHandler" type="(handler: OpenClawPluginHttpHandler) => void">
+  Register a global HTTP handler. Handlers are called for all requests.
+
+  ```typescript
+  api.registerHttpHandler((req, res) => {
+    if (req.url?.startsWith("/my-prefix")) {
+      // Handle request
+      return true; // Handled
+    }
+    return false; // Pass to next handler
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="registerCli" type="(registrar: OpenClawPluginCliRegistrar, opts?: { commands?: string[] }) => void">
+  Register CLI commands. Add custom commands to the `openclaw` CLI.
+
+  ```typescript
+  api.registerCli((ctx) => {
+    ctx.program
+      .command("my-command")
+      .description("Custom command")
+      .action(() => {
+        ctx.logger.info("Command executed");
+      });
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="registerCommand" type="(command: OpenClawPluginCommandDefinition) => void">
+  Register a plugin command. Plugin commands bypass the LLM agent and are processed before built-in commands.
+
+  ```typescript
+  api.registerCommand({
+    name: "status",
+    description: "Check plugin status",
+    acceptsArgs: false,
+    requireAuth: true,
+    handler: async (ctx) => {
+      return { text: "Plugin is running" };
+    }
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="registerProvider" type="(provider: ProviderPlugin) => void">
+  Register an authentication provider. Providers integrate with `openclaw login`.
+
+  ```typescript
+  api.registerProvider({
+    id: "my-provider",
+    label: "My Provider",
+    auth: [/* auth methods */]
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="registerGatewayMethod" type="(method: string, handler: GatewayRequestHandler) => void">
+  Register a custom gateway method. Gateway methods are JSON-RPC endpoints exposed via the gateway.
+
+  ```typescript
+  api.registerGatewayMethod("my.method", async (params) => {
+    return { result: "success" };
+  });
+  ```
+</ResponseField>
+
+### Utility Methods
+
+<ResponseField name="resolvePath" type="(input: string) => string">
+  Resolve paths relative to the plugin source directory.
+
+  ```typescript
+  const configPath = api.resolvePath("./config.json");
+  const srcPath = api.resolvePath("src/helper.ts");
+  ```
+</ResponseField>
+
+<ResponseField name="on" type="<K extends PluginHookName>(hookName: K, handler: PluginHookHandlerMap[K], opts?: { priority?: number }) => void">
+  Alternative API for registering lifecycle hooks with typed event handlers.
+
+  ```typescript
+  api.on("llm_input", async (event, ctx) => {
+    api.logger.info(`Model: ${event.model}`);
+  });
+  ```
+</ResponseField>
+
+## Runtime Services
+
+The `api.runtime` object provides access to OpenClaw's core services.
+
+### Config
+
+```typescript
+api.runtime.config.loadConfig();
+api.runtime.config.writeConfigFile(config);
+```
+
+### Media
+
+```typescript
+const media = await api.runtime.media.loadWebMedia(url);
+const mime = api.runtime.media.detectMime(buffer);
+const metadata = await api.runtime.media.getImageMetadata(buffer);
+const jpeg = await api.runtime.media.resizeToJpeg(buffer, { maxWidth: 1024 });
+```
+
+### Text Processing
+
+```typescript
+const chunks = api.runtime.channel.text.chunkMarkdownText(text, limit);
+const mode = api.runtime.channel.text.resolveChunkMode(config);
+const hasCommand = api.runtime.channel.text.hasControlCommand(text);
+```
+
+### Reply Dispatching
+
+```typescript
+await api.runtime.channel.reply.dispatchReplyFromConfig({
+  config,
+  channelId: "telegram",
+  to: "123456789",
+  text: "Hello"
+});
+```
+
+### Logging
+
+```typescript
+const childLogger = api.runtime.logging.getChildLogger(
+  { component: "my-plugin" },
+  { level: "info" }
+);
+
+if (api.runtime.logging.shouldLogVerbose()) {
+  childLogger.debug("Verbose log message");
+}
+```
+
+### State Directory
+
+```typescript
+const stateDir = api.runtime.state.resolveStateDir(config);
+```
+
+### Channel-Specific Services
+
+The runtime provides channel-specific helpers:
+
+```typescript
+// Discord
+api.runtime.channel.discord.sendMessageDiscord(...);
+api.runtime.channel.discord.probeDiscord(...);
+
+// Slack
+api.runtime.channel.slack.sendMessageSlack(...);
+api.runtime.channel.slack.probeSlack(...);
+
+// Telegram
+api.runtime.channel.telegram.sendMessageTelegram(...);
+api.runtime.channel.telegram.probeTelegram(...);
+
+// WhatsApp
+api.runtime.channel.whatsapp.sendMessageWhatsApp(...);
+api.runtime.channel.whatsapp.loginWeb(...);
+
+// Signal
+api.runtime.channel.signal.sendMessageSignal(...);
+
+// iMessage
+api.runtime.channel.imessage.sendMessageIMessage(...);
+
+// LINE
+api.runtime.channel.line.sendMessageLine(...);
+```
+
+See the [runtime types](https://github.com/openclaw/openclaw/blob/main/src/plugins/runtime/types.ts) for the complete API.
+
+## Plugin SDK Exports
+
+The `openclaw/plugin-sdk` package exports types and utilities:
+
+### Types
+
+```typescript
+import type {
+  OpenClawPluginApi,
+  OpenClawPluginDefinition,
+  OpenClawPluginService,
+  PluginRuntime,
+  RuntimeLogger,
+  AnyAgentTool,
+  ChannelPlugin,
+  ChannelConfigSchema,
+  HookEntry,
+  OpenClawConfig,
+  ProviderAuthContext,
+  ProviderAuthResult
+} from "openclaw/plugin-sdk";
+```
+
+### Helper Functions
+
+```typescript
+import {
+  emptyPluginConfigSchema,
+  normalizePluginHttpPath,
+  registerPluginHttpRoute,
+  normalizeWebhookPath,
+  resolveWebhookPath,
+  registerWebhookTarget,
+  buildAgentMediaPayload,
+  buildBaseChannelStatusSummary,
+  buildOauthProviderAuthResult,
+  acquireFileLock,
+  withFileLock
+} from "openclaw/plugin-sdk";
+```
+
+### Channel Helpers
+
+```typescript
+import {
+  createAccountListHelpers,
+  buildChannelConfigSchema,
+  resolveChannelAccountConfigBasePath,
+  recordInboundSession,
+  createReplyPrefixContext,
+  createTypingCallbacks,
+  extractToolSend,
+  formatDocsLink
+} from "openclaw/plugin-sdk";
+```
+
+### Config Schemas (Zod)
+
+```typescript
+import {
+  DiscordConfigSchema,
+  GoogleChatConfigSchema,
+  IMessageConfigSchema,
+  MSTeamsConfigSchema,
+  SignalConfigSchema,
+  SlackConfigSchema,
+  TelegramConfigSchema,
+  WhatsAppConfigSchema,
+  DmConfigSchema,
+  GroupPolicySchema,
+  MarkdownConfigSchema,
+  ToolPolicySchema
+} from "openclaw/plugin-sdk";
+```
+
+## Example: Complete Plugin
+
+```typescript
+import type { OpenClawPluginApi, AnyAgentTool } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import { Type } from "@sinclair/typebox";
+
+function createExampleTool(api: OpenClawPluginApi): AnyAgentTool {
+  return {
+    name: "example",
+    description: "Example tool",
+    input: Type.Object({
+      message: Type.String()
+    }),
+    execute: async (args) => {
+      api.logger.info(`Tool called: ${args.message}`);
+      return { result: "success", details: { message: args.message } };
+    }
+  };
+}
+
+const plugin = {
+  id: "example",
+  name: "Example Plugin",
+  description: "Demonstrates plugin SDK features",
+  configSchema: emptyPluginConfigSchema(),
+  
+  register(api: OpenClawPluginApi) {
+    // Register tool
+    api.registerTool(createExampleTool(api));
+
+    // Register hook
+    api.registerHook("llm_input", async (event, ctx) => {
+      api.logger.info(`LLM call: ${event.provider}/${event.model}`);
+    });
+
+    // Register HTTP route
+    api.registerHttpRoute({
+      path: "/webhook/example",
+      handler: async (req, res) => {
+        res.writeHead(200);
+        res.end("OK");
+      }
+    });
+
+    api.logger.info("Plugin registered");
+  },
+
+  activate(api: OpenClawPluginApi) {
+    api.logger.info("Plugin activated");
+  }
+};
+
+export default plugin;
+```
+
+## Next Steps
+
+- [Hooks](/plugins/hooks) - Implement lifecycle hooks
+- [Tools](/plugins/tools) - Build custom agent tools
+- [Channels](/plugins/channels) - Create channel integrations
+- [Examples](/plugins/examples) - Real-world plugin examples

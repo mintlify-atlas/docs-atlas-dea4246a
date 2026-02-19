@@ -1,0 +1,417 @@
+---
+title: "REST Endpoints"
+description: "HTTP REST API endpoints for OpenClaw Gateway"
+---
+
+# REST Endpoints
+
+The OpenClaw Gateway provides HTTP REST endpoints for specific use cases including OpenAI compatibility, webhooks, and tool invocation.
+
+## OpenAI-Compatible Chat Completions
+
+### POST /v1/chat/completions
+
+OpenAI-compatible chat completions endpoint.
+
+**Authentication:**
+
+```bash
+Authorization: Bearer your-token-here
+```
+
+**Request Body:**
+
+<ParamField path="model" type="string" required>
+  Model identifier (e.g., `"openclaw"`, `"gpt-4"`). Maps to OpenClaw agent.
+</ParamField>
+
+<ParamField path="messages" type="array" required>
+  Array of message objects with `role` and `content`
+</ParamField>
+
+<ParamField path="stream" type="boolean" default={false}>
+  Enable streaming responses (SSE)
+</ParamField>
+
+<ParamField path="user" type="string">
+  User identifier for session scoping
+</ParamField>
+
+**Response:**
+
+<ResponseField name="id" type="string">
+  Completion ID (format: `chatcmpl_<uuid>`)
+</ResponseField>
+
+<ResponseField name="object" type="string">
+  `"chat.completion"` or `"chat.completion.chunk"` (for streaming)
+</ResponseField>
+
+<ResponseField name="created" type="number">
+  Unix timestamp
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  Model identifier from request
+</ResponseField>
+
+<ResponseField name="choices" type="array">
+  Array of completion choices
+</ResponseField>
+
+<ResponseField name="usage" type="object">
+  Token usage statistics
+</ResponseField>
+
+**Example (Non-Streaming):**
+
+```bash
+curl -X POST http://localhost:18789/v1/chat/completions \
+  -H "Authorization: Bearer your-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openclaw",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "What is OpenClaw?"}
+    ]
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "id": "chatcmpl_123e4567-e89b-12d3-a456-426614174000",
+  "object": "chat.completion",
+  "created": 1234567890,
+  "model": "openclaw",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "OpenClaw is an open-source AI agent framework..."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  }
+}
+```
+
+**Example (Streaming):**
+
+```bash
+curl -X POST http://localhost:18789/v1/chat/completions \
+  -H "Authorization: Bearer your-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "openclaw",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": true
+  }'
+```
+
+**Streaming Response (SSE):**
+
+```
+data: {"id":"chatcmpl_123","object":"chat.completion.chunk","created":1234567890,"model":"openclaw","choices":[{"index":0,"delta":{"role":"assistant"}}]}
+
+data: {"id":"chatcmpl_123","object":"chat.completion.chunk","created":1234567890,"model":"openclaw","choices":[{"index":0,"delta":{"content":"Hello"}}]}
+
+data: [DONE]
+```
+
+## Webhook Endpoints (Hooks)
+
+### POST /hooks/:path
+
+Custom webhook endpoints for external integrations.
+
+**Configuration:**
+
+```yaml
+hooks:
+  enabled: true
+  token: "your-hook-token"
+  path: "/hooks"
+  maxBodyBytes: 262144
+```
+
+**Authentication:**
+
+```bash
+Authorization: Bearer your-hook-token
+```
+
+Or:
+
+```bash
+X-OpenClaw-Token: your-hook-token
+```
+
+**Wake Endpoint:**
+
+```bash
+POST /hooks/wake
+Content-Type: application/json
+
+{
+  "text": "Wake up message",
+  "mode": "now"  // or "next-heartbeat"
+}
+```
+
+**Agent Endpoint:**
+
+```bash
+POST /hooks/agent
+Content-Type: application/json
+
+{
+  "message": "User message",
+  "agentId": "default",
+  "sessionKey": "hook:session-123",
+  "name": "Webhook User",
+  "deliver": true,
+  "channel": "signal",
+  "to": "+1234567890",
+  "model": "gpt-4",
+  "thinking": "high",
+  "wakeMode": "now",
+  "timeoutSeconds": 300
+}
+```
+
+<ParamField path="message" type="string" required>
+  User message to send to agent
+</ParamField>
+
+<ParamField path="agentId" type="string">
+  Target agent ID (defaults to configured default)
+</ParamField>
+
+<ParamField path="sessionKey" type="string">
+  Session key for conversation context
+</ParamField>
+
+<ParamField path="name" type="string">
+  Display name for the sender
+</ParamField>
+
+<ParamField path="deliver" type="boolean" default={true}>
+  Whether to deliver response via channel
+</ParamField>
+
+<ParamField path="channel" type="string">
+  Channel to deliver response (e.g., `"signal"`, `"telegram"`, `"discord"`)
+</ParamField>
+
+<ParamField path="to" type="string">
+  Recipient identifier (phone number, user ID, etc.)
+</ParamField>
+
+<ParamField path="model" type="string">
+  Override model for this request
+</ParamField>
+
+<ParamField path="thinking" type="string">
+  Thinking budget: `"low"`, `"medium"`, `"high"`
+</ParamField>
+
+<ParamField path="wakeMode" type="string" default="now">
+  `"now"` or `"next-heartbeat"`
+</ParamField>
+
+<ParamField path="timeoutSeconds" type="number">
+  Request timeout in seconds
+</ParamField>
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "runId": "unique-run-id"
+}
+```
+
+**Custom Mappings:**
+
+You can define custom webhook mappings:
+
+```yaml
+hooks:
+  mappings:
+    - path: "github"
+      action:
+        kind: "agent"
+        message: "{{ payload.commits[0].message }}"
+        channel: "discord"
+        to: "#dev-notifications"
+```
+
+See [Hooks](/gateway/hooks) for details.
+
+## Tool Invocation
+
+### POST /api/tools/invoke
+
+HTTP-based tool invocation endpoint.
+
+**Authentication:**
+
+```bash
+Authorization: Bearer your-token
+```
+
+**Request Body:**
+
+<ParamField path="tool" type="string" required>
+  Tool name to invoke
+</ParamField>
+
+<ParamField path="params" type="object">
+  Tool-specific parameters
+</ParamField>
+
+**Example:**
+
+```bash
+curl -X POST http://localhost:18789/api/tools/invoke \
+  -H "Authorization: Bearer your-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool": "weather",
+    "params": {
+      "location": "San Francisco"
+    }
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "result": {
+    "temperature": 68,
+    "conditions": "Partly cloudy"
+  }
+}
+```
+
+## Channel Endpoints
+
+### POST /api/slack/events
+
+Slack Events API endpoint for receiving Slack app events.
+
+**Authentication:** Handled via Slack signing secret verification.
+
+**Request Body:** Slack event payload (see [Slack Events API](https://api.slack.com/events)).
+
+**Response:**
+
+```json
+{
+  "ok": true
+}
+```
+
+See [Slack Integration](/channels/slack) for setup.
+
+### /api/channels/:channelId/*
+
+Channel-specific HTTP endpoints exposed by channel plugins.
+
+**Authentication:**
+
+```bash
+Authorization: Bearer your-token
+```
+
+**Examples:**
+- `/api/channels/telegram/webhook` - Telegram webhook
+- `/api/channels/discord/interactions` - Discord interactions
+
+Channel endpoints are dynamically registered by plugins. See individual channel documentation.
+
+## Health Check
+
+### GET /health
+
+Health check endpoint (no authentication required).
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "status": "healthy"
+}
+```
+
+## Error Responses
+
+All REST endpoints return standard error responses:
+
+**400 Bad Request:**
+
+```json
+{
+  "error": {
+    "message": "Invalid request body",
+    "type": "invalid_request_error"
+  }
+}
+```
+
+**401 Unauthorized:**
+
+```json
+{
+  "error": {
+    "message": "Unauthorized",
+    "type": "authentication_error"
+  }
+}
+```
+
+**429 Too Many Requests:**
+
+```json
+{
+  "error": {
+    "message": "Too many failed authentication attempts. Please try again later.",
+    "type": "rate_limited"
+  }
+}
+```
+
+**500 Internal Server Error:**
+
+```json
+{
+  "error": {
+    "message": "Internal error",
+    "type": "api_error"
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Hooks" icon="webhook" href="/gateway/hooks">
+    Configure webhook integrations
+  </Card>
+  <Card title="OpenAI Compatibility" icon="brain" href="/gateway/openai-compat">
+    Use OpenAI-compatible API
+  </Card>
+</CardGroup>

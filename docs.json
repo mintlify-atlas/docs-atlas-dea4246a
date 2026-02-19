@@ -1,122 +1,166 @@
 {
   "$schema": "https://mintlify.com/docs.json",
+  "name": "OpenClaw",
+  "description": "Self-hosted AI assistant gateway for WhatsApp, Telegram, Discord, iMessage, and more messaging platforms",
   "theme": "mint",
-  "name": "Mint Starter Kit",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
-  },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "tabs": [
-      {
-        "tab": "Guides",
-        "groups": [
-          {
-            "group": "Getting started",
-            "pages": [
-              "index",
-              "quickstart",
-              "development"
-            ]
-          },
-          {
-            "group": "Customization",
-            "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "API reference",
-        "groups": [
-          {
-            "group": "API documentation",
-            "pages": [
-              "api-reference/introduction"
-            ]
-          },
-          {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
-            ]
-          }
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
+    "primary": "#FF5A36",
+    "light": "#FF8A6B",
+    "dark": "#FF5A36"
   },
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/openclaw/openclaw"
     }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/openclaw/openclaw",
+      "discord": "https://discord.gg/clawd"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/gateway",
+              "concepts/agents",
+              "concepts/channels",
+              "concepts/sessions",
+              "concepts/routing"
+            ]
+          },
+          {
+            "group": "Channels",
+            "pages": [
+              "channels/overview",
+              "channels/whatsapp",
+              "channels/telegram",
+              "channels/discord",
+              "channels/slack",
+              "channels/imessage",
+              "channels/signal",
+              "channels/pairing"
+            ]
+          },
+          {
+            "group": "Platform Apps",
+            "pages": [
+              "platforms/macos",
+              "platforms/ios",
+              "platforms/android",
+              "platforms/web"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/deployment",
+              "guides/docker",
+              "guides/security",
+              "guides/multi-agent",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Commands",
+            "pages": [
+              "cli/overview",
+              "cli/gateway",
+              "cli/agent",
+              "cli/channels",
+              "cli/config",
+              "cli/onboard"
+            ]
+          },
+          {
+            "group": "Management",
+            "pages": [
+              "cli/daemon",
+              "cli/logs",
+              "cli/update",
+              "cli/doctor"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Plugin Development",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "plugins/introduction",
+              "plugins/architecture",
+              "plugins/getting-started"
+            ]
+          },
+          {
+            "group": "SDK Reference",
+            "pages": [
+              "plugins/plugin-sdk",
+              "plugins/hooks",
+              "plugins/tools",
+              "plugins/channels"
+            ]
+          },
+          {
+            "group": "Extensions",
+            "pages": [
+              "plugins/built-in-extensions",
+              "plugins/publishing",
+              "plugins/examples"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Gateway API",
+            "pages": [
+              "api/overview",
+              "api/authentication",
+              "api/websocket",
+              "api/rest-endpoints"
+            ]
+          },
+          {
+            "group": "Agent Communication",
+            "pages": [
+              "api/agent-protocol",
+              "api/messages",
+              "api/sessions",
+              "api/events"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

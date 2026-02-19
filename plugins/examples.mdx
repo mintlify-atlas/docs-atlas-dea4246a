@@ -1,0 +1,588 @@
+---
+title: "Plugin Examples"
+description: "Real-world plugin implementations"
+---
+
+This page showcases complete plugin examples from OpenClaw's built-in extensions. Use these as templates for building your own plugins.
+
+## Example 1: Simple Tool Plugin
+
+The **LLM Task** plugin adds a single tool for running JSON-only LLM tasks.
+
+### Structure
+
+```
+extensions/llm-task/
+  package.json
+  index.ts
+  README.md
+  src/
+    llm-task-tool.ts
+```
+
+### Entry Point
+
+```typescript
+// extensions/llm-task/index.ts
+import type { AnyAgentTool, OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { createLlmTaskTool } from "./src/llm-task-tool.js";
+
+export default function register(api: OpenClawPluginApi) {
+  api.registerTool(createLlmTaskTool(api) as unknown as AnyAgentTool, {
+    optional: true
+  });
+}
+```
+
+### Tool Implementation
+
+```typescript
+// extensions/llm-task/src/llm-task-tool.ts
+import type { OpenClawPluginApi, AnyAgentTool } from "openclaw/plugin-sdk";
+import { Type } from "@sinclair/typebox";
+import { stringEnum, optionalStringEnum } from "openclaw/plugin-sdk";
+
+export function createLlmTaskTool(api: OpenClawPluginApi): AnyAgentTool {
+  return {
+    name: "llm-task",
+    description:
+      "Run a JSON-only LLM task (drafting, summarizing, classifying) with " +
+      "optional JSON Schema validation. Returns parsed JSON.",
+    input: Type.Object({
+      prompt: Type.String({
+        description: "Task prompt (what to generate/summarize/classify)"
+      }),
+      input: Type.Optional(
+        Type.Unknown({ description: "Input data for the task" })
+      ),
+      schema: Type.Optional(
+        Type.Object({}, {
+          additionalProperties: true,
+          description: "JSON Schema for output validation"
+        })
+      ),
+      provider: Type.Optional(Type.String({ description: "LLM provider" })),
+      model: Type.Optional(Type.String({ description: "Model name" })),
+      authProfileId: Type.Optional(Type.String()),
+      temperature: Type.Optional(Type.Number()),
+      maxTokens: Type.Optional(Type.Integer()),
+      timeoutMs: Type.Optional(Type.Integer())
+    }),
+    execute: async (args) => {
+      try {
+        // Build prompt
+        const fullPrompt = buildPrompt(args.prompt, args.input);
+
+        // Call LLM (simplified)
+        const response = await callLlm({
+          prompt: fullPrompt,
+          provider: args.provider,
+          model: args.model,
+          temperature: args.temperature,
+          maxTokens: args.maxTokens
+        });
+
+        // Parse JSON response
+        const json = JSON.parse(response.text);
+
+        // Validate against schema if provided
+        if (args.schema) {
+          validateJson(json, args.schema);
+        }
+
+        return {
+          result: "success",
+          details: { json }
+        };
+      } catch (err) {
+        api.logger.error(`LLM task failed: ${err}`);
+        return {
+          result: "error",
+          error: err instanceof Error ? err.message : String(err)
+        };
+      }
+    }
+  };
+}
+
+function buildPrompt(task: string, input?: unknown): string {
+  let prompt = task + "\n\n";
+  if (input) {
+    prompt += `Input:\n${JSON.stringify(input, null, 2)}\n\n`;
+  }
+  prompt += "Output only valid JSON (no code fences, no commentary).";
+  return prompt;
+}
+```
+
+### Configuration
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "llm-task": {
+        "enabled": true,
+        "config": {
+          "defaultProvider": "openai",
+          "defaultModel": "gpt-4",
+          "maxTokens": 800
+        }
+      }
+    }
+  },
+  "agents": {
+    "list": [
+      { "id": "main", "tools": { "allow": ["llm-task"] } }
+    ]
+  }
+}
+```
+
+## Example 2: Service Plugin
+
+The **Diagnostics (OpenTelemetry)** plugin exports diagnostics events to OpenTelemetry.
+
+### Entry Point
+
+```typescript
+// extensions/diagnostics-otel/index.ts
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import { createDiagnosticsOtelService } from "./src/service.js";
+
+const plugin = {
+  id: "diagnostics-otel",
+  name: "Diagnostics OpenTelemetry",
+  description: "Export diagnostics events to OpenTelemetry",
+  configSchema: emptyPluginConfigSchema(),
+  register(api: OpenClawPluginApi) {
+    api.registerService(createDiagnosticsOtelService());
+  }
+};
+
+export default plugin;
+```
+
+### Service Implementation
+
+```typescript
+// extensions/diagnostics-otel/src/service.ts
+import type { OpenClawPluginService } from "openclaw/plugin-sdk";
+import { onDiagnosticEvent } from "openclaw/plugin-sdk";
+import { trace } from "@opentelemetry/api";
+
+export function createDiagnosticsOtelService(): OpenClawPluginService {
+  return {
+    id: "diagnostics-otel",
+    
+    start: async (ctx) => {
+      ctx.logger.info("Starting OpenTelemetry exporter");
+
+      // Subscribe to diagnostic events
+      onDiagnosticEvent((event) => {
+        const tracer = trace.getTracer("openclaw");
+
+        if (event.type === "session_state") {
+          const span = tracer.startSpan("session", {
+            attributes: {
+              "session.id": event.sessionId,
+              "session.state": event.state,
+              "session.messages": event.messageCount
+            }
+          });
+          span.end();
+        }
+
+        if (event.type === "usage") {
+          const span = tracer.startSpan("llm_call", {
+            attributes: {
+              "llm.provider": event.provider,
+              "llm.model": event.model,
+              "llm.input_tokens": event.inputTokens,
+              "llm.output_tokens": event.outputTokens
+            }
+          });
+          span.end();
+        }
+      });
+
+      ctx.logger.info("OpenTelemetry exporter started");
+    },
+
+    stop: async (ctx) => {
+      ctx.logger.info("Stopping OpenTelemetry exporter");
+      // Cleanup...
+    }
+  };
+}
+```
+
+### Configuration
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "diagnostics-otel": {
+        "enabled": true,
+        "config": {
+          "endpoint": "http://localhost:4318/v1/traces",
+          "serviceName": "openclaw-gateway"
+        }
+      }
+    }
+  }
+}
+```
+
+## Example 3: Channel Plugin
+
+The **Matrix** channel plugin demonstrates a complete channel implementation.
+
+### Entry Point
+
+```typescript
+// extensions/matrix/index.ts
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import { matrixPlugin } from "./src/channel.js";
+import { setMatrixRuntime } from "./src/runtime.js";
+
+const plugin = {
+  id: "matrix",
+  name: "Matrix",
+  description: "Matrix channel plugin (matrix-js-sdk)",
+  configSchema: emptyPluginConfigSchema(),
+  register(api: OpenClawPluginApi) {
+    // Store runtime for use in channel adapters
+    setMatrixRuntime(api.runtime);
+    api.registerChannel({ plugin: matrixPlugin });
+  }
+};
+
+export default plugin;
+```
+
+### Channel Plugin
+
+```typescript
+// extensions/matrix/src/channel.ts (simplified)
+import type { ChannelPlugin } from "openclaw/plugin-sdk";
+import {
+  buildChannelConfigSchema,
+  normalizeAccountId
+} from "openclaw/plugin-sdk";
+import { MatrixConfigSchema } from "./config-schema.js";
+import { probeMatrix } from "./matrix/probe.js";
+import { sendMessageMatrix } from "./matrix/send.js";
+
+export const matrixPlugin: ChannelPlugin = {
+  id: "matrix",
+  
+  meta: {
+    id: "matrix",
+    label: "Matrix",
+    selectionLabel: "Matrix (plugin)",
+    docsPath: "/channels/matrix",
+    docsLabel: "matrix",
+    blurb: "Open protocol for decentralized communication",
+    order: 70
+  },
+
+  capabilities: {
+    supportsDm: true,
+    supportsGroup: true,
+    supportsPolling: false,
+    supportsWebhook: false
+  },
+
+  configSchema: buildChannelConfigSchema(MatrixConfigSchema, {
+    homeserver: { label: "Homeserver URL", placeholder: "https://matrix.org" },
+    userId: { label: "User ID", placeholder: "@bot:matrix.org" },
+    accessToken: { sensitive: true, label: "Access Token" }
+  }),
+
+  config: {
+    resolveAccount: (config, accountId) => {
+      const section = config.channels?.matrix;
+      if (!section?.enabled) return null;
+
+      return {
+        accountId: normalizeAccountId(accountId),
+        config,
+        homeserver: section.homeserver,
+        userId: section.userId,
+        accessToken: section.accessToken
+      };
+    },
+
+    listAccounts: (config) => {
+      const section = config.channels?.matrix;
+      return section?.enabled ? ["default"] : [];
+    }
+  },
+
+  gateway: {
+    start: async ({ account, logger }) => {
+      logger.info(`Starting Matrix client for ${account.userId}`);
+      
+      // Create Matrix client
+      const client = await createMatrixClient(account);
+
+      // Listen for messages
+      client.on("Room.timeline", async (event) => {
+        if (event.getType() !== "m.room.message") return;
+
+        const roomId = event.getRoomId();
+        const senderId = event.getSender();
+        const content = event.getContent();
+
+        // Dispatch to agent
+        await dispatchInboundMessage({
+          channelId: "matrix",
+          accountId: account.accountId,
+          from: senderId,
+          to: roomId,
+          text: content.body
+        });
+      });
+
+      await client.startClient();
+      return client;
+    },
+
+    stop: async (client) => {
+      await client.stopClient();
+    }
+  },
+
+  outbound: {
+    send: async ({ account, to, payload }) => {
+      if (payload.kind === "text") {
+        await sendMessageMatrix({
+          account,
+          roomId: to,
+          text: payload.text
+        });
+        return { ok: true };
+      }
+
+      return { ok: false, error: `Unsupported payload: ${payload.kind}` };
+    }
+  },
+
+  status: {
+    describe: async ({ account }) => {
+      const issues = [];
+
+      if (!account.accessToken) {
+        issues.push({
+          severity: "error" as const,
+          message: "Missing access token"
+        });
+      }
+
+      const probe = await probeMatrix(account);
+      if (!probe.ok) {
+        issues.push({
+          severity: "error" as const,
+          message: probe.error ?? "Connection failed"
+        });
+      }
+
+      return {
+        summary: issues.length === 0 ? "connected" : "error",
+        issues
+      };
+    }
+  }
+};
+```
+
+### Configuration
+
+```json
+{
+  "channels": {
+    "matrix": {
+      "enabled": true,
+      "homeserver": "https://matrix.example.com",
+      "userId": "@bot:example.com",
+      "accessToken": "syt_...",
+      "dm": { "allow": ["@user:example.com"] },
+      "groups": {
+        "allow": ["!room:example.com"],
+        "requireMention": true
+      }
+    }
+  }
+}
+```
+
+## Example 4: Hook-Based Plugin
+
+A plugin that logs session activity using hooks:
+
+```typescript
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { writeFile } from "node:fs/promises";
+
+const plugin = {
+  id: "session-logger",
+  name: "Session Logger",
+  description: "Log session activity to disk",
+  
+  register(api: OpenClawPluginApi) {
+    const sessions = new Map<string, SessionLog>();
+
+    // Session start
+    api.registerHook("session_start", async (event) => {
+      sessions.set(event.sessionId, {
+        startTime: Date.now(),
+        llmCalls: 0,
+        toolCalls: 0,
+        messages: 0
+      });
+      api.logger.info(`Session started: ${event.sessionId}`);
+    });
+
+    // LLM call
+    api.registerHook("llm_input", async (event) => {
+      const log = sessions.get(event.sessionId);
+      if (log) {
+        log.llmCalls++;
+      }
+    });
+
+    // Tool call
+    api.registerHook("after_tool_call", async (event, ctx) => {
+      const sessionId = ctx.sessionKey;
+      const log = sessionId && sessions.get(sessionId);
+      if (log) {
+        log.toolCalls++;
+      }
+    });
+
+    // Message sent
+    api.registerHook("message_sent", async (event) => {
+      // Increment message count...
+    });
+
+    // Session end
+    api.registerHook("session_end", async (event) => {
+      const log = sessions.get(event.sessionId);
+      if (!log) return;
+
+      const report = {
+        sessionId: event.sessionId,
+        duration: Date.now() - log.startTime,
+        messageCount: event.messageCount,
+        llmCalls: log.llmCalls,
+        toolCalls: log.toolCalls
+      };
+
+      const logPath = api.resolvePath(`logs/session-${event.sessionId}.json`);
+      await writeFile(logPath, JSON.stringify(report, null, 2));
+
+      sessions.delete(event.sessionId);
+      api.logger.info(`Session log written: ${logPath}`);
+    });
+  }
+};
+
+type SessionLog = {
+  startTime: number;
+  llmCalls: number;
+  toolCalls: number;
+  messages: number;
+};
+
+export default plugin;
+```
+
+## Example 5: Multi-Tool Plugin
+
+A plugin that registers multiple related tools:
+
+```typescript
+import type { OpenClawPluginApi, AnyAgentTool } from "openclaw/plugin-sdk";
+import { Type } from "@sinclair/typebox";
+import { stringEnum } from "openclaw/plugin-sdk";
+
+function createGitTools(api: OpenClawPluginApi): AnyAgentTool[] {
+  return [
+    {
+      name: "git_status",
+      description: "Check git repository status",
+      input: Type.Object({
+        path: Type.String({ description: "Repository path" })
+      }),
+      execute: async (args) => {
+        const { stdout } = await execCommand("git status", { cwd: args.path });
+        return { result: "success", details: { output: stdout } };
+      }
+    },
+    {
+      name: "git_commit",
+      description: "Create a git commit",
+      input: Type.Object({
+        path: Type.String({ description: "Repository path" }),
+        message: Type.String({ description: "Commit message" }),
+        files: Type.Array(Type.String({ description: "Files to commit" }))
+      }),
+      execute: async (args) => {
+        await execCommand(`git add ${args.files.join(" ")}`, { cwd: args.path });
+        await execCommand(`git commit -m "${args.message}"`, { cwd: args.path });
+        return { result: "success" };
+      }
+    },
+    {
+      name: "git_log",
+      description: "View git commit history",
+      input: Type.Object({
+        path: Type.String({ description: "Repository path" }),
+        count: Type.Optional(Type.Integer({ description: "Number of commits", default: 10 }))
+      }),
+      execute: async (args) => {
+        const { stdout } = await execCommand(
+          `git log -${args.count ?? 10} --oneline`,
+          { cwd: args.path }
+        );
+        return { result: "success", details: { log: stdout } };
+      }
+    }
+  ];
+}
+
+const plugin = {
+  id: "git-tools",
+  name: "Git Tools",
+  description: "Git repository management tools",
+  
+  register(api: OpenClawPluginApi) {
+    const tools = createGitTools(api);
+    for (const tool of tools) {
+      api.registerTool(tool, { optional: true });
+    }
+    api.logger.info(`Registered ${tools.length} git tools`);
+  }
+};
+
+export default plugin;
+```
+
+## Exploring More Examples
+
+Browse the [extensions directory](https://github.com/openclaw/openclaw/tree/main/extensions) for 39+ complete plugin implementations:
+
+- **Channels:** `matrix`, `msteams`, `irc`, `mattermost`, `nextcloud-talk`
+- **Tools:** `llm-task`, `lobster`, `voice-call`, `phone-control`
+- **Services:** `diagnostics-otel`, `memory-lancedb`, `copilot-proxy`
+- **Auth:** `google-antigravity-auth`, `minimax-portal-auth`
+
+## Next Steps
+
+- [Plugin SDK Reference](/plugins/plugin-sdk) - Complete API documentation
+- [Publishing](/plugins/publishing) - Share your plugin on npm
+- [Built-in Extensions](/plugins/built-in-extensions) - Explore all built-in plugins

@@ -1,0 +1,346 @@
+---
+title: "openclaw logs"
+description: "Tail gateway file logs via RPC"
+---
+
+# openclaw logs
+
+View and follow OpenClaw Gateway logs in real-time.
+
+## Usage
+
+```bash
+openclaw logs [options]
+```
+
+## Options
+
+<ParamField path="--limit <n>" type="number">
+  Maximum lines to return per fetch (default: 200)
+</ParamField>
+
+<ParamField path="--max-bytes <n>" type="number">
+  Maximum bytes to read per fetch (default: 250000)
+</ParamField>
+
+<ParamField path="--follow" type="boolean">
+  Follow log output continuously (like `tail -f`)
+</ParamField>
+
+<ParamField path="--interval <ms>" type="number">
+  Polling interval in milliseconds when following (default: 1000)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output structured JSON log lines
+</ParamField>
+
+<ParamField path="--plain" type="boolean">
+  Plain text output without ANSI styling
+</ParamField>
+
+<ParamField path="--no-color" type="boolean">
+  Disable ANSI colors
+</ParamField>
+
+<ParamField path="--local-time" type="boolean">
+  Display timestamps in local timezone instead of UTC
+</ParamField>
+
+<ParamField path="--url <url>" type="string">
+  Gateway WebSocket URL (overrides config)
+</ParamField>
+
+<ParamField path="--token <token>" type="string">
+  Gateway authentication token
+</ParamField>
+
+<ParamField path="--timeout <ms>" type="number">
+  RPC timeout in milliseconds
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+```bash Basic
+# View recent logs
+openclaw logs
+
+# View last 500 lines
+openclaw logs --limit 500
+
+# Follow logs in real-time
+openclaw logs --follow
+```
+
+```bash Formatting
+# Plain text (no colors)
+openclaw logs --plain
+
+# JSON output
+openclaw logs --json
+
+# Local timezone
+openclaw logs --local-time
+
+# No colors (for piping)
+openclaw logs --no-color > logs.txt
+```
+
+```bash Advanced
+# Follow with custom interval
+openclaw logs --follow --interval 500
+
+# More data per fetch
+openclaw logs --limit 1000 --max-bytes 500000
+
+# Connect to remote gateway
+openclaw logs --url ws://remote-host:18789 --token mytoken
+```
+
+```bash Filtering
+# Pipe to grep for filtering
+openclaw logs --plain | grep ERROR
+
+# Follow and filter
+openclaw logs --follow --plain | grep "agent"
+
+# JSON output for jq processing
+openclaw logs --json | jq 'select(.level=="error")'
+```
+</CodeGroup>
+
+## Log Format
+
+### Pretty Format (Default)
+
+When connected to a TTY, logs are formatted for readability:
+
+```
+12:34:56 info  gateway   Starting WebSocket server
+12:34:57 info  telegram  Connected to Telegram API
+12:34:58 warn  agent     High token usage detected
+12:34:59 error discord   Failed to send message
+```
+
+Format: `TIME LEVEL MODULE MESSAGE`
+
+### Plain Format
+
+With `--plain` or when piped:
+
+```
+2026-02-19T12:34:56.789Z info gateway Starting WebSocket server
+2026-02-19T12:34:57.123Z info telegram Connected to Telegram API
+```
+
+### JSON Format
+
+With `--json`:
+
+```json
+{"type":"log","time":"2026-02-19T12:34:56.789Z","level":"info","subsystem":"gateway","message":"Starting WebSocket server"}
+{"type":"log","time":"2026-02-19T12:34:57.123Z","level":"info","subsystem":"telegram","message":"Connected to Telegram API"}
+```
+
+## Log Levels
+
+Logs are categorized by severity:
+
+- **trace**: Detailed debug information
+- **debug**: Debug messages
+- **info**: Informational messages (default)
+- **warn**: Warning messages
+- **error**: Error messages
+- **fatal**: Fatal errors
+
+### Level Colors
+
+In pretty mode, levels are color-coded:
+- **error/fatal**: Red
+- **warn**: Yellow
+- **info**: Cyan
+- **debug/trace**: Gray
+
+## Following Logs
+
+Use `--follow` to continuously monitor logs:
+
+```bash
+openclaw logs --follow
+```
+
+This behaves like `tail -f`, polling the gateway every second (configurable with `--interval`).
+
+To stop following, press `Ctrl+C`.
+
+## Remote Gateway
+
+To view logs from a remote gateway:
+
+```bash
+# Direct connection
+openclaw logs --url ws://remote-host:18789 --token mytoken
+
+# Via SSH tunnel (set up tunnel first)
+ssh -L 18789:localhost:18789 user@remote-host
+openclaw logs
+```
+
+## Log Rotation
+
+The gateway rotates log files automatically:
+- Maximum file size: 10 MB
+- Keeps 5 rotated files
+- Rotated files: `gateway.log.1`, `gateway.log.2`, etc.
+
+When rotation occurs, the `logs` command:
+1. Detects the rotation
+2. Resets the cursor
+3. Continues from the new file
+
+## Structured Logging
+
+Logs include structured metadata:
+
+```json
+{
+  "time": "2026-02-19T12:34:56.789Z",
+  "level": "info",
+  "subsystem": "gateway",
+  "module": "websocket",
+  "message": "Client connected",
+  "clientId": "abc123",
+  "remoteAddress": "127.0.0.1"
+}
+```
+
+Use `--json` to process structured logs with tools like `jq`:
+
+```bash
+# Extract all error messages
+openclaw logs --json | jq -r 'select(.level=="error") | .message'
+
+# Count log entries by level
+openclaw logs --json | jq -r '.level' | sort | uniq -c
+
+# Filter by subsystem
+openclaw logs --json | jq 'select(.subsystem=="telegram")'
+```
+
+## Performance
+
+The `logs` command:
+- Fetches logs via Gateway RPC (requires running gateway)
+- Uses cursor-based pagination for efficiency
+- Streams output to avoid buffering
+- Handles backpressure from slow terminals
+
+### Limits
+
+- **--limit**: Controls lines per fetch (affects latency)
+- **--max-bytes**: Prevents excessive memory usage
+- **--interval**: Controls polling frequency when following
+
+For high-throughput scenarios:
+
+```bash
+# More frequent updates
+openclaw logs --follow --interval 250 --limit 500
+```
+
+## Troubleshooting
+
+### Gateway Not Reachable
+
+If logs fail to connect:
+
+```
+Gateway not reachable. Is it running and accessible?
+```
+
+1. **Check gateway status**:
+   ```bash
+   openclaw gateway status
+   ```
+
+2. **Verify gateway is running**:
+   ```bash
+   openclaw daemon status
+   ```
+
+3. **Check authentication**:
+   ```bash
+   openclaw config get gateway.auth
+   ```
+
+4. **Run diagnostics**:
+   ```bash
+   openclaw doctor
+   ```
+
+### Log Truncation
+
+If you see "Log tail truncated":
+
+```bash
+# Increase max bytes
+openclaw logs --max-bytes 500000
+```
+
+### Broken Pipe
+
+If piping to a command that exits early (like `head`):
+
+```bash
+openclaw logs --plain | head -100
+# openclaw logs: output stdout closed (EPIPE). Stopping tail.
+```
+
+This is expected behavior when the pipe consumer closes.
+
+## Alternative Log Access
+
+### Direct File Access
+
+Logs are stored in:
+```
+~/.openclaw/logs/gateway.log
+```
+
+You can read them directly:
+
+```bash
+tail -f ~/.openclaw/logs/gateway.log
+```
+
+### Platform-Specific Logs
+
+#### macOS (Unified Logs)
+
+```bash
+log show --predicate 'subsystem == "ai.openclaw"' --last 1h
+log stream --predicate 'subsystem == "ai.openclaw"'
+```
+
+#### Linux (systemd Journal)
+
+```bash
+journalctl --user -u openclaw-gateway -f
+journalctl --user -u openclaw-gateway --since "1 hour ago"
+```
+
+### Channel-Specific Logs
+
+For channel-specific logs:
+
+```bash
+openclaw channels logs --channel telegram
+```
+
+## Related Commands
+
+- [gateway](/cli/gateway) - Manage the gateway
+- [daemon](/cli/daemon) - Manage gateway service
+- [channels logs](/cli/channels) - View channel-specific logs
+- [status](/cli/status) - Check system status

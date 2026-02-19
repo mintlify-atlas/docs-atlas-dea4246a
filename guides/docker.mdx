@@ -1,0 +1,545 @@
+---
+title: Docker Setup
+description: Run OpenClaw gateway in Docker containers with docker-compose for production deployments
+---
+
+# Docker Setup
+
+This guide covers running OpenClaw in Docker containers using the official Dockerfile and docker-compose configurations.
+
+## Overview
+
+Docker deployment benefits:
+- Isolated runtime environment
+- Reproducible builds
+- Easy version management
+- Simplified updates
+- Cross-platform consistency
+
+## Prerequisites
+
+- Docker Engine 20.10+
+- Docker Compose 2.0+ (optional, for multi-container setup)
+- 2GB available disk space
+- Basic Docker knowledge
+
+## Quick Start
+
+### Build from Source
+
+```bash
+# Clone repository
+git clone https://github.com/openclaw/openclaw.git
+cd openclaw
+
+# Build image
+docker build -t openclaw:local .
+
+# Run gateway
+docker run -d \
+  --name openclaw-gateway \
+  -e OPENCLAW_GATEWAY_TOKEN="your-secure-token" \
+  -e CLAUDE_AI_SESSION_KEY="your-session-key" \
+  -v ~/.openclaw:/home/node/.openclaw \
+  -p 18789:18789 \
+  openclaw:local
+```
+
+### Using Docker Compose
+
+The repository includes a production-ready `docker-compose.yml`:
+
+```bash
+# Create .env file
+cat > .env <<EOF
+OPENCLAW_IMAGE=openclaw:local
+OPENCLAW_GATEWAY_TOKEN=your-secure-token
+CLAUDE_AI_SESSION_KEY=your-session-key
+OPENCLAW_CONFIG_DIR=/path/to/.openclaw
+OPENCLAW_WORKSPACE_DIR=/path/to/workspace
+OPENCLAW_GATEWAY_BIND=lan
+OPENCLAW_GATEWAY_PORT=18789
+EOF
+
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f openclaw-gateway
+
+# Stop services
+docker-compose down
+```
+
+## Dockerfile Reference
+
+The official `Dockerfile` includes:
+
+```dockerfile
+FROM node:22-bookworm
+
+# Install Bun (required for build scripts)
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+RUN corepack enable
+
+WORKDIR /app
+
+# Optional: Install additional system packages
+ARG OPENCLAW_DOCKER_APT_PACKAGES=""
+RUN if [ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]; then \
+      apt-get update && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $OPENCLAW_DOCKER_APT_PACKAGES && \
+      apt-get clean && \
+      rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
+    fi
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY ui/package.json ./ui/package.json
+COPY patches ./patches
+COPY scripts ./scripts
+
+RUN pnpm install --frozen-lockfile
+
+# Optional: Pre-install Chromium for browser automation
+# Adds ~300MB but eliminates 60-90s Playwright install on startup
+ARG OPENCLAW_INSTALL_BROWSER=""
+RUN if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
+      apt-get update && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb && \
+      node /app/node_modules/playwright-core/cli.js install --with-deps chromium && \
+      apt-get clean && \
+      rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
+    fi
+
+COPY . .
+RUN pnpm build
+
+# Force pnpm for UI build (Bun may fail on ARM/Synology)
+ENV OPENCLAW_PREFER_PNPM=1
+RUN pnpm ui:build
+
+ENV NODE_ENV=production
+
+# Security: Run as non-root user
+RUN chown -R node:node /app
+USER node
+
+# Default: bind to loopback for security
+# Override for container deployments requiring external access
+CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
+```
+
+### Build Arguments
+
+| Argument | Description | Example |
+|----------|-------------|----------|
+| `OPENCLAW_DOCKER_APT_PACKAGES` | Additional apt packages | `"git curl vim"` |
+| `OPENCLAW_INSTALL_BROWSER` | Pre-install Chromium | `"1"` |
+
+**Build with browser pre-installed:**
+
+```bash
+docker build \
+  --build-arg OPENCLAW_INSTALL_BROWSER=1 \
+  -t openclaw:browser .
+```
+
+## Docker Compose Configuration
+
+From `docker-compose.yml` in the repository:
+
+```yaml
+services:
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
+      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
+      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
+    ports:
+      - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+      - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
+    init: true
+    restart: unless-stopped
+    command:
+      [
+        "node",
+        "dist/index.js",
+        "gateway",
+        "--bind",
+        "${OPENCLAW_GATEWAY_BIND:-lan}",
+        "--port",
+        "18789",
+      ]
+
+  openclaw-cli:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      BROWSER: echo
+      CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
+      CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
+      CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
+    stdin_open: true
+    tty: true
+    init: true
+    entrypoint: ["node", "dist/index.js"]
+```
+
+### Service Breakdown
+
+**`openclaw-gateway`** — Main gateway service:
+- Exposes ports 18789 (gateway) and 18790 (bridge)
+- Mounts config and workspace directories
+- Auto-restarts on failure
+- Uses `--bind lan` for container networking
+
+**`openclaw-cli`** — Interactive CLI service:
+- Shares same volumes as gateway
+- For running interactive commands
+- Requires TTY allocation
+
+## Volume Mounting
+
+<Warning>
+Persistence requires proper volume mounts. Without volumes, all state is lost on container restart.
+</Warning>
+
+### Critical Directories
+
+| Container Path | Description | Required |
+|----------------|-------------|----------|
+| `/home/node/.openclaw` | Config, credentials, sessions | Yes |
+| `/home/node/.openclaw/workspace` | Agent workspace files | Recommended |
+
+### Volume Examples
+
+**Bind mounts (development):**
+
+```bash
+docker run -d \
+  -v ~/.openclaw:/home/node/.openclaw \
+  -v ~/openclaw-workspace:/home/node/.openclaw/workspace \
+  openclaw:local
+```
+
+**Named volumes (production):**
+
+```yaml
+services:
+  openclaw-gateway:
+    volumes:
+      - openclaw-config:/home/node/.openclaw
+      - openclaw-workspace:/home/node/.openclaw/workspace
+
+volumes:
+  openclaw-config:
+  openclaw-workspace:
+```
+
+## Environment Variables
+
+### Required Variables
+
+```bash
+# Authentication (choose one)
+OPENCLAW_GATEWAY_TOKEN=your-secure-token-here
+# or
+OPENCLAW_GATEWAY_PASSWORD=your-secure-password
+
+# Provider credentials
+CLAUDE_AI_SESSION_KEY=sk-ant-...
+```
+
+### Optional Variables
+
+```bash
+# State directories
+OPENCLAW_STATE_DIR=/home/node/.openclaw
+OPENCLAW_WORKSPACE_DIR=/home/node/.openclaw/workspace
+
+# Gateway configuration
+OPENCLAW_GATEWAY_BIND=lan
+OPENCLAW_GATEWAY_PORT=18789
+
+# Runtime
+NODE_ENV=production
+NODE_OPTIONS=--max-old-space-size=2048
+
+# Build preferences
+OPENCLAW_PREFER_PNPM=1
+```
+
+## Networking
+
+### Port Exposure
+
+```bash
+# Map to different host port
+docker run -p 8080:18789 openclaw:local
+
+# Bind to specific interface
+docker run -p 127.0.0.1:18789:18789 openclaw:local
+
+# Multiple ports
+docker run \
+  -p 18789:18789 \
+  -p 18790:18790 \
+  openclaw:local
+```
+
+### Gateway Bind Modes
+
+For containerized deployments:
+
+```bash
+# LAN access (required for Docker health checks)
+docker run \
+  -e OPENCLAW_GATEWAY_BIND=lan \
+  openclaw:local node openclaw.mjs gateway --bind lan
+
+# Loopback (requires docker exec for access)
+docker run \
+  openclaw:local node openclaw.mjs gateway --bind loopback
+```
+
+<Note>
+Default Dockerfile CMD binds to loopback for security. Override with `--bind lan` for container networking.
+</Note>
+
+## Running on Different Platforms
+
+### Synology NAS
+
+OpenClaw works on Synology Docker:
+
+1. Build with ARM support if needed:
+   ```bash
+   docker buildx build --platform linux/arm64 -t openclaw:arm64 .
+   ```
+
+2. Use Synology Docker UI:
+   - Import image or build from Git
+   - Create container with environment variables
+   - Map volumes to NAS storage
+   - Enable auto-restart
+
+3. Environment variable notes:
+   - Force pnpm: `OPENCLAW_PREFER_PNPM=1`
+   - Disable browser: Don't set `OPENCLAW_INSTALL_BROWSER`
+
+### Raspberry Pi
+
+For ARM devices:
+
+```bash
+# Build for ARM64
+docker buildx build \
+  --platform linux/arm64 \
+  -t openclaw:arm64 .
+
+# Run with memory limits
+docker run -d \
+  --memory=1g \
+  --memory-swap=2g \
+  -e NODE_OPTIONS="--max-old-space-size=768" \
+  openclaw:arm64
+```
+
+### Kubernetes
+
+Example deployment:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openclaw
+  template:
+    metadata:
+      labels:
+        app: openclaw
+    spec:
+      containers:
+      - name: gateway
+        image: openclaw:local
+        ports:
+        - containerPort: 18789
+        env:
+        - name: OPENCLAW_GATEWAY_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: openclaw-secrets
+              key: gateway-token
+        - name: OPENCLAW_GATEWAY_BIND
+          value: "lan"
+        volumeMounts:
+        - name: config
+          mountPath: /home/node/.openclaw
+        - name: workspace
+          mountPath: /home/node/.openclaw/workspace
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: openclaw-config
+      - name: workspace
+        persistentVolumeClaim:
+          claimName: openclaw-workspace
+```
+
+## Troubleshooting
+
+### Container Won't Start
+
+```bash
+# Check logs
+docker logs openclaw-gateway
+
+# Interactive shell
+docker run -it --entrypoint /bin/bash openclaw:local
+
+# Verify volumes
+docker inspect openclaw-gateway | grep -A 10 Mounts
+```
+
+### Permission Issues
+
+The container runs as `node` user (UID 1000):
+
+```bash
+# Fix host directory permissions
+sudo chown -R 1000:1000 ~/.openclaw
+
+# Or run as root (not recommended)
+docker run --user root openclaw:local
+```
+
+### Network Issues
+
+```bash
+# Test connectivity
+docker exec openclaw-gateway curl localhost:18789/health
+
+# Check gateway bind
+docker exec openclaw-gateway netstat -tlnp
+
+# Verify environment
+docker exec openclaw-gateway env | grep OPENCLAW
+```
+
+### Browser Automation Fails
+
+Rebuild with Chromium pre-installed:
+
+```bash
+docker build \
+  --build-arg OPENCLAW_INSTALL_BROWSER=1 \
+  -t openclaw:browser .
+```
+
+## Production Best Practices
+
+<Steps>
+  <Step title="Use named volumes">
+    Avoid bind mounts in production for better portability
+  </Step>
+  
+  <Step title="Set resource limits">
+    ```bash
+    docker run \
+      --memory=2g \
+      --cpus=2 \
+      openclaw:local
+    ```
+  </Step>
+  
+  <Step title="Enable auto-restart">
+    ```bash
+    docker run --restart unless-stopped openclaw:local
+    ```
+  </Step>
+  
+  <Step title="Use secrets for credentials">
+    ```bash
+    docker secret create openclaw_token token.txt
+    docker service create \
+      --secret openclaw_token \
+      openclaw:local
+    ```
+  </Step>
+  
+  <Step title="Monitor logs">
+    ```bash
+    docker logs -f --tail 100 openclaw-gateway
+    ```
+  </Step>
+</Steps>
+
+## Updating
+
+### Rebuild and Restart
+
+```bash
+# Pull latest source
+cd openclaw && git pull
+
+# Rebuild image
+docker build -t openclaw:local .
+
+# Stop old container
+docker stop openclaw-gateway
+docker rm openclaw-gateway
+
+# Start new container (volumes preserve state)
+docker run -d \
+  --name openclaw-gateway \
+  -v ~/.openclaw:/home/node/.openclaw \
+  openclaw:local
+```
+
+### With Docker Compose
+
+```bash
+# Pull latest and rebuild
+cd openclaw && git pull
+docker-compose build
+
+# Restart services
+docker-compose up -d
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Security Guide" icon="shield" href="/guides/security">
+    Secure your Docker deployment
+  </Card>
+  <Card title="Deployment Options" icon="cloud" href="/guides/deployment">
+    Deploy to cloud platforms
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Common Docker issues
+  </Card>
+  <Card title="Multi-Agent Setup" icon="users" href="/guides/multi-agent">
+    Run multiple isolated agents
+  </Card>
+</CardGroup>

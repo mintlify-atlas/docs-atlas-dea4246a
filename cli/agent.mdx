@@ -1,0 +1,220 @@
+---
+title: "openclaw agent"
+description: "Run one agent turn via the Gateway"
+---
+
+# openclaw agent
+
+Execute a single agent interaction through the OpenClaw Gateway.
+
+## Usage
+
+```bash
+openclaw agent [options]
+```
+
+## Options
+
+<ParamField path="--message <text>" type="string" required>
+  The message or prompt to send to the agent
+</ParamField>
+
+<ParamField path="--to <identifier>" type="string">
+  Recipient identifier (E.164 phone number, user ID, etc.)
+</ParamField>
+
+<ParamField path="--session-id <id>" type="string">
+  Explicit session ID to use or create
+</ParamField>
+
+<ParamField path="--session-key <key>" type="string">
+  Session key for routing (format: agent:sessionId)
+</ParamField>
+
+<ParamField path="--agent <id>" type="string">
+  Agent ID to use for this interaction
+</ParamField>
+
+<ParamField path="--thinking <level>" type="string">
+  Thinking level: `off`, `low`, `medium`, `high`, or `xhigh`
+  
+  Controls how much reasoning the agent performs before responding.
+</ParamField>
+
+<ParamField path="--thinking-once <level>" type="string">
+  One-time thinking level override (same values as --thinking)
+</ParamField>
+
+<ParamField path="--verbose <level>" type="string">
+  Verbose output level: `on`, `full`, or `off`
+</ParamField>
+
+<ParamField path="--timeout <seconds>" type="number">
+  Timeout in seconds (0 means no timeout)
+</ParamField>
+
+<ParamField path="--deliver" type="boolean">
+  Deliver the response to the recipient via their channel
+</ParamField>
+
+<ParamField path="--reply-to <id>" type="string">
+  Message ID to reply to
+</ParamField>
+
+<ParamField path="--thread-id <id>" type="string">
+  Thread ID for threaded conversations
+</ParamField>
+
+<ParamField path="--channel <name>" type="string">
+  Message channel (telegram, discord, slack, etc.)
+</ParamField>
+
+<ParamField path="--reply-channel <name>" type="string">
+  Override channel for reply delivery
+</ParamField>
+
+<ParamField path="--lane <lane>" type="string">
+  Agent lane identifier for routing
+</ParamField>
+
+<ParamField path="--run-id <id>" type="string">
+  Custom run ID for tracking (defaults to session ID)
+</ParamField>
+
+<ParamField path="--extra-system-prompt <text>" type="string">
+  Additional system prompt to inject
+</ParamField>
+
+<ParamField path="--images <paths>" type="string">
+  Comma-separated list of image file paths to include
+</ParamField>
+
+## Thinking Levels
+
+The `--thinking` flag controls the agent's reasoning process:
+
+- **off**: No explicit reasoning, direct responses
+- **low**: Minimal reasoning for simple queries
+- **medium**: Moderate reasoning for typical tasks
+- **high**: Deep reasoning for complex problems
+- **xhigh**: Extended reasoning (only for supported models)
+
+<Note>
+The `xhigh` thinking level is only available for specific models like o1-preview and o1-mini.
+</Note>
+
+## Delivery Options
+
+By default, agent responses are printed to stdout. Use `--deliver` to send responses through the configured channel:
+
+```bash
+# Print response to terminal
+openclaw agent --message "Hello" --to +1234567890
+
+# Deliver via channel
+openclaw agent --message "Hello" --to +1234567890 --deliver
+```
+
+## Examples
+
+<CodeGroup>
+```bash Basic
+# Send a simple message
+openclaw agent --message "What is the weather today?" --to +1234567890
+
+# Send with high thinking level
+openclaw agent --message "Solve this complex problem" --thinking high --to +1234567890
+
+# Send and deliver response
+openclaw agent --message "Generate a report" --to +1234567890 --deliver
+```
+
+```bash Session Management
+# Use specific session ID
+openclaw agent --message "Continue our discussion" --session-id abc123
+
+# Use session key
+openclaw agent --message "Hello" --session-key default:session123
+
+# Use specific agent
+openclaw agent --message "Task" --agent researcher --to +1234567890
+```
+
+```bash Advanced
+# Send with images
+openclaw agent --message "Analyze this" --images "/path/to/image.jpg" --to +1234567890
+
+# Reply in a thread
+openclaw agent --message "Reply" --to +1234567890 --thread-id thread123 --reply-to msg456
+
+# Custom timeout
+openclaw agent --message "Long task" --timeout 600 --to +1234567890
+
+# Verbose output
+openclaw agent --message "Debug this" --verbose full --to +1234567890
+```
+
+```bash Channel Routing
+# Send via specific channel
+openclaw agent --message "Hello" --to +1234567890 --channel telegram
+
+# Deliver to different channel
+openclaw agent --message "Cross-post" --to +1234567890 --channel slack --reply-channel discord
+```
+</CodeGroup>
+
+<Warning>
+You must specify at least one of `--to`, `--session-id`, `--session-key`, or `--agent` to identify the target session.
+</Warning>
+
+## Session Persistence
+
+Agent conversations are automatically persisted to session files. Each session maintains:
+
+- Conversation history
+- Model preferences
+- Thinking level settings
+- Skills snapshot
+- Authentication profile
+
+Sessions are stored in `~/.openclaw/sessions/` by default.
+
+## Model Selection
+
+The agent uses the configured default model unless overridden in the session. To change models:
+
+```bash
+# Configure default model
+openclaw config set agents.defaults.model.primary anthropic:claude-4.5-sonnet
+
+# Or use the models command
+openclaw models set anthropic:claude-4.5-sonnet
+```
+
+## Error Handling
+
+If an agent turn fails, the CLI returns a non-zero exit code:
+
+```bash
+if openclaw agent --message "Task" --to +1234567890; then
+  echo "Success"
+else
+  echo "Agent failed"
+fi
+```
+
+## Environment Variables
+
+<ParamField path="OPENCLAW_AGENT_TIMEOUT" type="number">
+  Default timeout in seconds for agent operations
+</ParamField>
+
+<ParamField path="OPENCLAW_THINKING_DEFAULT" type="string">
+  Default thinking level (off, low, medium, high, xhigh)
+</ParamField>
+
+## Related Commands
+
+- [agents](/cli/agents) - Manage isolated agents and workspaces
+- [sessions](/cli/sessions) - List stored conversation sessions
+- [models](/cli/models) - Manage model configurations

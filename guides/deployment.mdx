@@ -1,0 +1,463 @@
+---
+title: Deployment Guide
+description: Deploy OpenClaw to production environments with best practices for local, VPS, and cloud platforms
+---
+
+# Deployment Guide
+
+This guide covers deploying OpenClaw gateway to production environments, from local development to cloud-hosted infrastructure.
+
+## Overview
+
+OpenClaw gateway can be deployed in several modes:
+
+- **Local machine** — Your laptop/desktop (Mac, Linux, WSL2)
+- **VPS/Bare metal** — Dedicated servers (Hetzner, DigitalOcean, OVH)
+- **Cloud platforms** — Managed services (Fly.io, Railway, Render, GCP)
+- **Container orchestration** — Docker, Docker Compose, Kubernetes
+
+## System Requirements
+
+### Minimum Specifications
+
+- **CPU**: 1 core (2+ cores recommended for multiple agents)
+- **RAM**: 512 MB minimum, 1-2 GB recommended
+- **Storage**: 1 GB minimum, 5+ GB recommended for workspace and logs
+- **Network**: Stable internet connection, persistent IP recommended
+
+### Runtime Requirements
+
+- **Node.js**: 22+ (LTS recommended)
+- **Optional**: Docker for containerized deployments
+- **Optional**: Tailscale for secure remote access
+
+## Pre-Deployment Checklist
+
+Before deploying to production:
+
+<Steps>
+  <Step title="Run security audit">
+    ```bash
+    openclaw security audit --deep
+    ```
+  </Step>
+  
+  <Step title="Run doctor checks">
+    ```bash
+    openclaw doctor
+    ```
+  </Step>
+  
+  <Step title="Test gateway locally">
+    ```bash
+    openclaw gateway --port 18789 --bind loopback
+    ```
+  </Step>
+  
+  <Step title="Verify authentication">
+    ```bash
+    openclaw config get gateway.auth.token
+    # or
+    echo $OPENCLAW_GATEWAY_TOKEN
+    ```
+  </Step>
+  
+  <Step title="Backup configuration">
+    ```bash
+    cp ~/.openclaw/config.json ~/.openclaw/config.json.backup
+    ```
+  </Step>
+</Steps>
+
+## Deployment Options
+
+### Local Development
+
+Ideal for:
+- Personal use
+- Development and testing
+- Single-user scenarios
+
+**Setup:**
+
+```bash
+# Install globally
+npm install -g openclaw@latest
+
+# Run onboarding wizard
+openclaw onboard --install-daemon
+
+# Start gateway (daemon will auto-start on boot)
+openclaw gateway --bind loopback
+```
+
+**Configuration:**
+
+```yaml
+# ~/.openclaw/config.json
+gateway:
+  mode: local
+  bind: loopback
+  port: 18789
+  auth:
+    mode: token
+    token: your-secure-token-here
+```
+
+### VPS Deployment
+
+Ideal for:
+- Always-on personal assistant
+- Remote access from multiple devices
+- Better uptime than local machine
+
+**Recommended Providers:**
+
+<CardGroup cols={2}>
+  <Card title="Hetzner" icon="server">
+    €4-20/month, excellent performance, EU-based
+  </Card>
+  <Card title="DigitalOcean" icon="droplet">
+    $6-40/month, simple setup, global regions
+  </Card>
+  <Card title="Linode" icon="cloud">
+    $5-40/month, strong support, predictable pricing
+  </Card>
+  <Card title="Vultr" icon="network-wired">
+    $6-40/month, high-frequency compute options
+  </Card>
+</CardGroup>
+
+**VPS Setup (Ubuntu 22.04+):**
+
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install OpenClaw
+sudo npm install -g openclaw@latest
+
+# Create openclaw user
+sudo useradd -m -s /bin/bash openclaw
+sudo -u openclaw bash
+
+# Run onboarding as openclaw user
+openclaw onboard --install-daemon
+
+# Start gateway with systemd (auto-enabled by onboard)
+sudo systemctl --user enable openclaw-gateway
+sudo systemctl --user start openclaw-gateway
+```
+
+**Networking:**
+
+```bash
+# For LAN-only access
+openclaw config set gateway.bind loopback
+
+# For remote access with Tailscale (recommended)
+openclaw config set gateway.bind tailnet
+
+# For remote access via public IP (requires strong auth)
+openclaw config set gateway.bind lan
+openclaw config set gateway.auth.token "$(openssl rand -hex 32)"
+```
+
+### Fly.io Deployment
+
+Ideal for:
+- Global edge deployment
+- Auto-scaling
+- Managed infrastructure
+
+**From source repository:**
+
+The included `fly.toml` configures:
+- 2GB RAM, 2 shared CPUs
+- Persistent volume for state
+- HTTPS with automatic certificates
+- Auto-restart on failure
+
+```bash
+# Install flyctl
+curl -L https://fly.io/install.sh | sh
+
+# Login
+fly auth login
+
+# Create app (in openclaw repo directory)
+fly apps create openclaw-gateway
+
+# Create volume for persistent state
+fly volumes create openclaw_data --size 1 --region iad
+
+# Set secrets
+fly secrets set OPENCLAW_GATEWAY_TOKEN="$(openssl rand -hex 32)"
+fly secrets set CLAUDE_AI_SESSION_KEY="your-session-key"
+
+# Deploy
+fly deploy
+
+# Check status
+fly status
+fly logs
+```
+
+**Configuration (`fly.toml`):**
+
+```toml
+app = "openclaw-gateway"
+primary_region = "iad"  # Change to your region
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  OPENCLAW_PREFER_PNPM = "1"
+  OPENCLAW_STATE_DIR = "/data"
+  NODE_OPTIONS = "--max-old-space-size=1536"
+
+[processes]
+  app = "node dist/index.js gateway --allow-unconfigured --port 3000 --bind lan"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2048mb"
+
+[mounts]
+  source = "openclaw_data"
+  destination = "/data"
+```
+
+### Railway Deployment
+
+Ideal for:
+- Simple one-click deployment
+- Automatic builds from GitHub
+- Integrated database options
+
+```bash
+# Install Railway CLI
+npm install -g @railway/cli
+
+# Login
+railway login
+
+# Create project
+railway init
+
+# Set environment variables
+railway variables set OPENCLAW_GATEWAY_TOKEN="$(openssl rand -hex 32)"
+railway variables set PORT=8080
+
+# Deploy
+railway up
+```
+
+### Render Deployment
+
+Ideal for:
+- Managed Docker hosting
+- Free tier available
+- Auto-deploy from Git
+
+**From source `render.yaml`:**
+
+```yaml
+services:
+  - type: web
+    name: openclaw
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: OPENCLAW_GATEWAY_TOKEN
+        generateValue: true
+      - key: OPENCLAW_STATE_DIR
+        value: /data/.openclaw
+    disk:
+      name: openclaw-data
+      mountPath: /data
+      sizeGB: 1
+```
+
+1. Fork OpenClaw repository
+2. Connect to Render dashboard
+3. Create "New Web Service" from repo
+4. Render auto-detects `render.yaml`
+5. Deploy!
+
+### Google Cloud Platform
+
+Ideal for:
+- Enterprise deployments
+- Integration with GCP services
+- Custom VM configurations
+
+**Cloud Run deployment:**
+
+```bash
+# Build and push image
+gcloud builds submit --tag gcr.io/PROJECT_ID/openclaw
+
+# Deploy to Cloud Run
+gcloud run deploy openclaw-gateway \
+  --image gcr.io/PROJECT_ID/openclaw \
+  --platform managed \
+  --region us-central1 \
+  --memory 2Gi \
+  --cpu 2 \
+  --set-env-vars OPENCLAW_GATEWAY_TOKEN=your-token
+```
+
+## Environment Variables
+
+Critical environment variables for production:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `OPENCLAW_GATEWAY_TOKEN` | Authentication token | Yes (if using token auth) |
+| `OPENCLAW_GATEWAY_PASSWORD` | Authentication password | Yes (if using password auth) |
+| `CLAUDE_AI_SESSION_KEY` | Claude API session key | Yes (for Claude provider) |
+| `CLAUDE_WEB_SESSION_KEY` | Claude web session | Optional |
+| `OPENCLAW_STATE_DIR` | State directory path | Optional (default: `~/.openclaw`) |
+| `OPENCLAW_WORKSPACE_DIR` | Workspace directory | Optional |
+| `NODE_ENV` | Node environment | Optional (default: `production`) |
+| `PORT` | Gateway port | Optional (default: 18789) |
+
+## Health Checks
+
+Monitor gateway health:
+
+```bash
+# Local health check
+curl http://localhost:18789/health
+
+# With authentication
+curl -H "Authorization: Bearer $OPENCLAW_GATEWAY_TOKEN" \
+     http://localhost:18789/health
+
+# CLI health check
+openclaw doctor
+openclaw channels status --probe
+```
+
+## Persistence and State
+
+OpenClaw stores state in:
+
+- **Config**: `~/.openclaw/config.json`
+- **Sessions**: `~/.openclaw/agents/<agent-id>/sessions/`
+- **Workspace**: `~/.openclaw/workspace/` (default)
+- **Credentials**: `~/.openclaw/credentials/`
+- **Logs**: Platform-specific (systemd journal, Docker logs)
+
+**Backup strategy:**
+
+```bash
+# Backup entire state directory
+tar -czf openclaw-backup-$(date +%Y%m%d).tar.gz ~/.openclaw/
+
+# Restore from backup
+tar -xzf openclaw-backup-20260219.tar.gz -C ~/
+```
+
+## Platform-Specific Notes
+
+### Linux (systemd)
+
+The onboarding wizard installs a systemd user service:
+
+```bash
+# Service management
+systemctl --user status openclaw-gateway
+systemctl --user restart openclaw-gateway
+systemctl --user stop openclaw-gateway
+
+# View logs
+journalctl --user -u openclaw-gateway -f
+
+# Enable linger (keeps service running after logout)
+sudo loginctl enable-linger $USER
+```
+
+### macOS (launchd)
+
+Gateway runs as a LaunchAgent:
+
+```bash
+# Via OpenClaw app
+# Start/stop from menu bar
+
+# Manual control
+launchctl list | grep openclaw
+./scripts/restart-mac.sh
+```
+
+### Docker Considerations
+
+<Warning>
+Ensure volume mounts for persistence:
+- `/home/node/.openclaw` for state
+- `/home/node/.openclaw/workspace` for workspace files
+</Warning>
+
+See [Docker Guide](/guides/docker) for detailed Docker setup.
+
+## Updating Production Deployments
+
+### VPS Update
+
+```bash
+# Stop gateway
+systemctl --user stop openclaw-gateway
+
+# Backup config
+cp ~/.openclaw/config.json ~/.openclaw/config.json.backup
+
+# Update
+npm install -g openclaw@latest
+
+# Run doctor
+openclaw doctor
+
+# Restart
+systemctl --user start openclaw-gateway
+```
+
+### Cloud Platform Updates
+
+- **Fly.io**: `fly deploy` (rebuilds from Dockerfile)
+- **Railway**: Push to connected Git branch
+- **Render**: Auto-deploys on Git push
+- **GCP Cloud Run**: Re-run `gcloud run deploy`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Setup" icon="docker" href="/guides/docker">
+    Containerized deployment with Docker Compose
+  </Card>
+  <Card title="Security Guide" icon="shield" href="/guides/security">
+    Secure your gateway with best practices
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Common issues and solutions
+  </Card>
+  <Card title="Multi-Agent Setup" icon="users" href="/guides/multi-agent">
+    Route channels to isolated agents
+  </Card>
+</CardGroup>

@@ -1,80 +1,219 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get OpenClaw up and running in under 5 minutes"
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+Get your personal AI assistant running in under 5 minutes. This guide will walk you through installation, onboarding, and sending your first message.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Before you begin, ensure you have:
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+- **Node.js ≥ 22**: OpenClaw requires Node.js version 22 or higher
+- **Package Manager**: npm, pnpm, or bun
+- **Operating System**: macOS, Linux, or Windows (via WSL2)
+- **AI Provider Account**: Anthropic (Claude) or OpenAI (ChatGPT) subscription
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+For the best experience, we recommend **Anthropic Pro/Max + Opus 4.6** for long-context strength and better prompt-injection resistance.
 </Note>
+
+## Installation
+
+<Steps>
+  <Step title="Install OpenClaw globally">
+    Choose your preferred package manager:
+
+    <CodeGroup>
+      ```bash npm
+      npm install -g openclaw@latest
+      ```
+
+      ```bash pnpm
+      pnpm add -g openclaw@latest
+      ```
+
+      ```bash bun
+      bun add -g openclaw@latest
+      ```
+    </CodeGroup>
+
+    <Tip>
+    Using pnpm? Make sure your shell's PATH includes `~/Library/pnpm` (macOS) or `~/.local/share/pnpm` (Linux).
+    </Tip>
+  </Step>
+
+  <Step title="Run the onboarding wizard">
+    The wizard will guide you through setting up the Gateway, configuring your AI model, and connecting your first channel:
+
+    ```bash
+    openclaw onboard --install-daemon
+    ```
+
+    The `--install-daemon` flag automatically installs the Gateway as a background service (launchd on macOS, systemd on Linux) so it stays running.
+
+    <Accordion title="What does the wizard do?">
+    The onboarding wizard:
+    1. Creates the configuration file at `~/.openclaw/openclaw.json`
+    2. Sets up your AI model credentials (Anthropic or OpenAI)
+    3. Configures the Gateway on port 18789
+    4. Optionally sets up your first messaging channel
+    5. Installs the Gateway daemon for automatic startup
+    </Accordion>
+  </Step>
+
+  <Step title="Start the Gateway">
+    If you didn't install the daemon, start the Gateway manually:
+
+    ```bash
+    openclaw gateway --port 18789 --verbose
+    ```
+
+    You should see output indicating the Gateway is running:
+
+    ```
+    Gateway listening on ws://127.0.0.1:18789
+    Control UI available at http://127.0.0.1:18789
+    ```
+
+    <Info>
+    The Gateway binds to localhost (127.0.0.1) by default for security. See the [deployment guide](/guides/deployment) for remote access options.
+    </Info>
+  </Step>
+</Steps>
+
+## Your First Message
+
+Once the Gateway is running, you can interact with your assistant in several ways:
+
+### Via CLI (Direct)
+
+Send a message directly to the agent:
+
+```bash
+oclaw agent --message "Hello, what can you help me with?"
+```
+
+### Via Messaging Channel
+
+If you configured a messaging channel during onboarding, just send a message to your bot on that platform:
+
+- **WhatsApp**: Send a message to your linked device
+- **Telegram**: Message your bot at `@yourbotname`
+- **Discord**: Mention your bot in a channel or DM
+- **Slack**: DM your bot or mention it in a channel
+
+### Via Web UI
+
+Open your browser to `http://127.0.0.1:18789` to access the Control UI and WebChat interface.
+
+<img
+  src="/images/control-ui.png"
+  alt="OpenClaw Control UI"
+  className="rounded-lg shadow-lg"
+/>
+
+## Verify Installation
+
+Check that everything is working correctly:
+
+```bash
+# Check Gateway status
+oclaw gateway status
+
+# Check connected channels
+oclaw channels status
+
+# Run diagnostics
+oclaw doctor
+```
+
+## Configuration File
+
+Your configuration is stored at `~/.openclaw/openclaw.json`. Here's a minimal example:
+
+```json
+{
+  "agent": {
+    "model": "anthropic/claude-opus-4-6"
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "loopback"
+  }
+}
+```
+
+See the [configuration guide](/configuration) for all available options.
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Port 18789 already in use">
+    If port 18789 is already in use, specify a different port:
+
+    ```bash
+    openclaw gateway --port 18790
+    ```
+
+    Update your config file to use the new port:
+
+    ```json
+    {
+      "gateway": {
+        "port": 18790
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Node version too old">
+    OpenClaw requires Node.js ≥ 22. Check your version:
+
+    ```bash
+    node --version
+    ```
+
+    If it's older, install Node 22+ using [nvm](https://github.com/nvm-sh/nvm) or your system's package manager.
+  </Accordion>
+
+  <Accordion title="Gateway won't start">
+    Check the logs for errors:
+
+    ```bash
+    openclaw logs --follow
+    ```
+
+    Common issues:
+    - Config file syntax errors (run `openclaw config validate`)
+    - Missing AI provider credentials
+    - Port conflicts
+    - File permission issues
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Add More Channels" icon="plug" href="/channels/overview">
+    Connect WhatsApp, Telegram, Discord, and more
+  </Card>
+  <Card title="Configure Your Gateway" icon="gear" href="/configuration">
+    Customize models, routing, and security settings
+  </Card>
+  <Card title="Explore Platform Apps" icon="mobile" href="/platforms/macos">
+    Install the macOS app or iOS/Android nodes
+  </Card>
+  <Card title="Deploy to Production" icon="server" href="/guides/deployment">
+    Run OpenClaw on a VPS or cloud instance
+  </Card>
+</CardGroup>
+
+## Learn More
+
+- **Architecture**: Understand how OpenClaw works in the [architecture guide](/concepts/architecture)
+- **Core Concepts**: Learn about [sessions](/concepts/sessions), [routing](/concepts/routing), and [agents](/concepts/agents)
+- **Security**: Review [security best practices](/guides/security) before exposing your Gateway
+- **Troubleshooting**: Check the [troubleshooting guide](/guides/troubleshooting) for common issues

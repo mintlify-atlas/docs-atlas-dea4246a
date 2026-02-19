@@ -1,0 +1,430 @@
+---
+title: Pairing & Device Verification
+description: Secure device pairing with QR codes, approval flows, and pairing tokens
+---
+
+OpenClaw uses **pairing** to securely connect new users and devices. When someone first messages your bot, they receive a unique pairing code. You approve or deny the pairing request, giving you control over who can access your AI agent.
+
+## How Pairing Works
+
+<Steps>
+  <Step title="Unknown user messages bot">
+    A user who is not in your `allowFrom` list sends a message to your bot.
+  </Step>
+
+  <Step title="Bot sends pairing code">
+    The bot automatically responds with a pairing code like:
+
+    ```
+    Pairing required. Your code: ABC-123-DEF
+    Ask the operator to approve with:
+    openclaw pairing approve whatsapp ABC-123-DEF
+    ```
+  </Step>
+
+  <Step title="You approve or deny">
+    Review the request and approve it:
+
+    ```bash
+    openclaw pairing approve whatsapp ABC-123-DEF
+    ```
+
+    Or deny it:
+
+    ```bash
+    openclaw pairing deny whatsapp ABC-123-DEF
+    ```
+  </Step>
+
+  <Step title="User is added to allowlist">
+    Upon approval, the user's identifier is automatically added to `allowFrom` in your config. They can now message the bot freely.
+  </Step>
+</Steps>
+
+## Enabling Pairing
+
+Pairing is enabled with the `pairing` DM policy:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "dmPolicy": "pairing",
+      "allowFrom": []
+    },
+    "discord": {
+      "dmPolicy": "pairing",
+      "allowFrom": []
+    }
+  }
+}
+```
+
+## Supported Channels
+
+Pairing is supported on these channels:
+
+- **WhatsApp** - Identifies by phone number (E.164)
+- **Telegram** - Identifies by user ID (numeric)
+- **Discord** - Identifies by user ID (snowflake)
+- **Slack** - Identifies by user ID (e.g., U123ABC456)
+- **Signal** - Identifies by phone number or UUID
+- **iMessage** - Identifies by phone number, email, or chat ID
+
+## Viewing Pending Requests
+
+List all pending pairing requests:
+
+```bash
+openclaw pairing list
+```
+
+Output:
+
+```
+Pending pairing requests:
+
+whatsapp:
+  +15555550123 - Code: ABC-123-DEF - Requested: 2 minutes ago
+
+telegram:
+  123456789 (@username) - Code: XYZ-789-GHI - Requested: 5 minutes ago
+```
+
+## Approving Requests
+
+### By Code
+
+Approve using the pairing code:
+
+```bash
+openclaw pairing approve whatsapp ABC-123-DEF
+```
+
+### By Identifier
+
+Approve using the user's identifier directly:
+
+```bash
+openclaw pairing approve telegram 123456789
+```
+
+### By Interactive Selection
+
+Let the CLI prompt you:
+
+```bash
+openclaw pairing approve
+```
+
+This shows a list of pending requests and lets you select which to approve.
+
+## Denying Requests
+
+Deny a pairing request:
+
+```bash
+openclaw pairing deny whatsapp ABC-123-DEF
+```
+
+Or by identifier:
+
+```bash
+openclaw pairing deny telegram 123456789
+```
+
+Denied users will receive a message notifying them their request was denied.
+
+## Pairing Token Lifecycle
+
+### Generation
+
+- Tokens are generated automatically when an unknown user messages
+- Format: `ABC-123-DEF` (3 groups of alphanumeric characters)
+- Tokens are unique per user per channel
+
+### Expiration
+
+Pairing tokens expire after 24 hours by default. Configure this:
+
+```json
+{
+  "channels": {
+    "pairing": {
+      "tokenExpiry": "24h"
+    }
+  }
+}
+```
+
+Supported formats:
+- `"1h"` - 1 hour
+- `"24h"` - 24 hours (default)
+- `"7d"` - 7 days
+
+### Storage
+
+Pairing tokens are stored in:
+
+```
+~/.openclaw/pairing/
+  ├── whatsapp.json
+  ├── telegram.json
+  ├── discord.json
+  └── ...
+```
+
+## Automatic Allowlist Updates
+
+When you approve a pairing request, OpenClaw automatically:
+
+1. Adds the user's identifier to `allowFrom` in your config
+2. Writes the updated config to disk
+3. Sends a confirmation message to the user
+
+Example: approving `+15555550123` on WhatsApp updates your config:
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "allowFrom": ["+15555550123"]
+    }
+  }
+}
+```
+
+## QR Code Pairing (WhatsApp & Signal)
+
+WhatsApp and Signal use QR codes for initial device pairing:
+
+### WhatsApp
+
+```bash
+openclaw channels login whatsapp
+```
+
+1. A QR code appears in your terminal
+2. Open WhatsApp on your phone → Settings → Linked Devices
+3. Tap "Link a Device" and scan the QR code
+4. Your device is now paired
+
+### Signal
+
+```bash
+signal-cli link -n "OpenClaw"
+```
+
+1. A QR code appears
+2. Open Signal on your phone → Settings → Linked Devices
+3. Tap "+" and scan the QR code
+4. Your device is now linked
+
+## Security Considerations
+
+### Pairing Codes
+
+- **Short-lived** - Expire after 24 hours by default
+- **Single-use** - Invalidated after approval or denial
+- **Channel-specific** - A code for WhatsApp won't work on Telegram
+- **Operator-controlled** - Only you can approve requests
+
+### Best Practices
+
+1. **Review requests promptly** - Don't leave pairing requests pending for days
+2. **Verify the sender** - Before approving, confirm you know who's requesting access
+3. **Use allowlist mode** for production bots with a fixed set of users
+4. **Monitor approvals** - Check `openclaw pairing list` regularly
+5. **Revoke access** if needed by removing from `allowFrom`
+
+## Revoking Access
+
+If you need to revoke a user's access:
+
+```bash
+openclaw pairing revoke whatsapp +15555550123
+```
+
+Or manually edit your config to remove them from `allowFrom`:
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "allowFrom": [
+        // Remove the user's identifier from this array
+      ]
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Pairing code not sent">
+    Check that:
+    - `dmPolicy` is set to `"pairing"` for the channel
+    - The channel is enabled and gateway is running
+    - The user is not already in `allowFrom`
+
+    Verify:
+
+    ```bash
+    openclaw channels status --probe
+    ```
+  </Accordion>
+
+  <Accordion title="Approval not working">
+    Common issues:
+    - Wrong channel name (use `openclaw pairing list` to see valid channels)
+    - Code typo (codes are case-sensitive: `ABC-123-DEF`)
+    - Code expired (default: 24 hours)
+
+    Check pending requests:
+
+    ```bash
+    openclaw pairing list
+    ```
+  </Accordion>
+
+  <Accordion title="User still cannot message after approval">
+    After approval, the user should be in `allowFrom`. Verify:
+
+    ```bash
+    openclaw config get channels.whatsapp.allowFrom
+    ```
+
+    If missing, manually add them:
+
+    ```bash
+    openclaw config set channels.whatsapp.allowFrom '["+15555550123"]'
+    ```
+
+    Then restart the gateway:
+
+    ```bash
+    openclaw gateway restart
+    ```
+  </Accordion>
+
+  <Accordion title="Pairing storage full or corrupted">
+    If you encounter issues with pairing storage, you can reset it:
+
+    ```bash
+    rm -rf ~/.openclaw/pairing/
+    openclaw gateway restart
+    ```
+
+    <Warning>
+      This will clear all pending pairing requests.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="QR code not appearing (WhatsApp/Signal)">
+    For WhatsApp:
+    - Ensure `web.enabled: true` in config
+    - Check logs: `openclaw logs --follow`
+    - Try again: `openclaw channels login whatsapp --force`
+
+    For Signal:
+    - Ensure signal-cli is installed
+    - Try: `signal-cli link -n "OpenClaw"`
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Configuration
+
+### Custom Pairing Messages
+
+Customize the pairing request message:
+
+```json
+{
+  "channels": {
+    "pairing": {
+      "message": "Hello! To use this bot, please share your pairing code with the administrator.\n\nYour code: {code}"
+    }
+  }
+}
+```
+
+Available placeholders:
+- `{code}` - The pairing code
+- `{channel}` - Channel name (e.g., "whatsapp")
+- `{identifier}` - User's identifier
+
+### Notification on New Requests
+
+Get notified of new pairing requests:
+
+```json
+{
+  "channels": {
+    "pairing": {
+      "notifyOn": ["telegram:123456789"],
+      "notifyMessage": "New pairing request on {channel} from {identifier}. Code: {code}"
+    }
+  }
+}
+```
+
+You'll receive a message on your configured notification channel whenever someone requests pairing.
+
+## CLI Reference
+
+### List Pending Requests
+
+```bash
+openclaw pairing list [channel]
+```
+
+Options:
+- `[channel]` - Optional: filter by channel (e.g., `whatsapp`, `telegram`)
+
+### Approve Request
+
+```bash
+openclaw pairing approve <channel> <code-or-identifier>
+```
+
+Examples:
+```bash
+openclaw pairing approve whatsapp ABC-123-DEF
+openclaw pairing approve telegram 123456789
+openclaw pairing approve discord @username
+```
+
+### Deny Request
+
+```bash
+openclaw pairing deny <channel> <code-or-identifier>
+```
+
+### Revoke Access
+
+```bash
+openclaw pairing revoke <channel> <identifier>
+```
+
+Removes the user from `allowFrom` in your config.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration Reference" icon="gear" href="/configuration">
+    Full configuration options
+  </Card>
+  
+  <Card title="WhatsApp Setup" icon="whatsapp" href="/channels/whatsapp">
+    Set up WhatsApp with QR pairing
+  </Card>
+  
+  <Card title="Security Best Practices" icon="shield" href="/security">
+    Secure your OpenClaw deployment
+  </Card>
+  
+  <Card title="CLI Commands" icon="terminal" href="/cli/pairing">
+    Full pairing command reference
+  </Card>
+</CardGroup>

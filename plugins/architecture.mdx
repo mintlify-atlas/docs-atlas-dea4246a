@@ -1,0 +1,238 @@
+---
+title: "Plugin Architecture"
+description: "How OpenClaw loads and manages plugins"
+---
+
+OpenClaw's plugin system uses a modular architecture where plugins register extensions via a standardized API. This page explains how plugins are loaded, registered, and executed.
+
+## Plugin Lifecycle
+
+### 1. Discovery
+
+OpenClaw discovers plugins from multiple sources:
+
+- **Workspace packages** - `extensions/` directory (monorepo pattern)
+- **npm packages** - Installed via `openclaw plugins install <package>`
+- **Config entries** - Listed in `config.json` under `plugins.entries`
+
+Plugins are discovered at startup and when configuration changes trigger a reload.
+
+### 2. Loading
+
+Plugins are loaded using dynamic imports (`jiti` for TypeScript support):
+
+```typescript
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+
+const plugin = {
+  id: "my-plugin",
+  name: "My Plugin",
+  description: "Example plugin",
+  register(api: OpenClawPluginApi) {
+    // Register extensions here
+  }
+};
+
+export default plugin;
+```
+
+The plugin module exports either:
+
+- An object with `id`, `name`, and `register` function
+- A function that receives the Plugin API directly
+
+### 3. Registration
+
+During registration, plugins use the Plugin API to register:
+
+- **Channels** - `api.registerChannel(plugin)`
+- **Tools** - `api.registerTool(tool, options)`
+- **Hooks** - `api.registerHook(events, handler, options)`
+- **Services** - `api.registerService(service)`
+- **HTTP handlers** - `api.registerHttpRoute({ path, handler })`
+- **CLI commands** - `api.registerCli(registrar)`
+- **Providers** - `api.registerProvider(provider)`
+
+### 4. Activation
+
+After registration, plugins can implement an optional `activate` method for deferred initialization:
+
+```typescript
+const plugin = {
+  id: "my-plugin",
+  register(api) {
+    api.registerTool(myTool);
+  },
+  activate(api) {
+    // Run after all plugins are registered
+    console.log("Plugin activated");
+  }
+};
+```
+
+## Plugin API
+
+The `OpenClawPluginApi` provides access to:
+
+### Core Properties
+
+- `id` - Plugin identifier
+- `name` - Plugin display name
+- `version` - Plugin version
+- `config` - OpenClaw configuration
+- `pluginConfig` - Plugin-specific configuration from `plugins.entries[id].config`
+- `runtime` - Runtime services (media, messaging, tools, logging)
+- `logger` - Scoped logger for plugin messages
+
+### Registration Methods
+
+- `registerChannel(registration)` - Register a channel plugin
+- `registerTool(tool, options)` - Register an agent tool
+- `registerHook(events, handler, options)` - Register a lifecycle hook
+- `registerService(service)` - Register a background service
+- `registerHttpRoute({ path, handler })` - Register an HTTP route
+- `registerCli(registrar)` - Register CLI commands
+- `registerProvider(provider)` - Register an auth provider
+- `registerCommand(command)` - Register a plugin command
+
+### Utility Methods
+
+- `resolvePath(input)` - Resolve paths relative to plugin source
+- `on(hookName, handler)` - Register lifecycle hooks (alternative API)
+
+## Runtime Services
+
+The `api.runtime` object provides access to OpenClaw's core services:
+
+```typescript
+api.runtime.config.loadConfig();
+api.runtime.media.loadWebMedia(url);
+api.runtime.channel.reply.dispatchReplyFromConfig(...);
+api.runtime.logging.getChildLogger({ plugin: api.id });
+```
+
+See [Plugin SDK Reference](/plugins/plugin-sdk) for the complete runtime API.
+
+## Plugin Configuration
+
+Plugins can define configuration schemas:
+
+```typescript
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import { z } from "zod";
+
+const configSchema = z.object({
+  apiKey: z.string(),
+  timeout: z.number().default(30000)
+});
+
+const plugin = {
+  id: "my-plugin",
+  configSchema: {
+    safeParse: (value) => configSchema.safeParse(value),
+    uiHints: {
+      apiKey: { sensitive: true, label: "API Key" },
+      timeout: { label: "Timeout (ms)", advanced: true }
+    }
+  },
+  register(api) {
+    const config = api.pluginConfig;
+    // Use config.apiKey, config.timeout
+  }
+};
+```
+
+Configuration is provided via `config.json`:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "my-plugin": {
+        "enabled": true,
+        "config": {
+          "apiKey": "sk-...",
+          "timeout": 60000
+        }
+      }
+    }
+  }
+}
+```
+
+## Workspace Package Pattern
+
+OpenClaw uses a monorepo pattern with workspace packages in `extensions/`:
+
+```
+extensions/
+  matrix/
+    package.json
+    index.ts
+    src/
+      channel.ts
+      config-schema.ts
+  msteams/
+    package.json
+    index.ts
+    src/
+```
+
+Each extension has:
+
+- `package.json` with `openclaw.extensions` entry pointing to `index.ts`
+- Entry point exports a plugin object
+- Dependencies in `dependencies` (not `devDependencies`)
+- `openclaw` in `devDependencies` or `peerDependencies`
+
+## Plugin Dependencies
+
+Plugins can have their own dependencies:
+
+```json
+{
+  "name": "@openclaw/matrix",
+  "dependencies": {
+    "@matrix-org/matrix-sdk-crypto-nodejs": "^0.4.0",
+    "@vector-im/matrix-bot-sdk": "0.8.0-element.3"
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  }
+}
+```
+
+**Important**: Runtime dependencies must be in `dependencies`. Development-only imports from `openclaw/plugin-sdk` should have `openclaw` in `devDependencies` or `peerDependencies`.
+
+## Plugin Isolation
+
+Plugins run in the same process as OpenClaw core but are logically isolated:
+
+- Each plugin has a scoped logger (`api.logger`)
+- Configuration is namespaced under `plugins.entries[id]`
+- HTTP routes are normalized to prevent conflicts
+- Tools can be marked `optional` to require explicit allowlisting
+
+## Error Handling
+
+Plugins should handle errors gracefully:
+
+```typescript
+register(api) {
+  try {
+    api.registerTool(myTool);
+  } catch (err) {
+    api.logger.error(`Failed to register tool: ${err}`);
+  }
+}
+```
+
+Plugin errors are logged but don't crash the gateway. Use `api.logger` for diagnostic output.
+
+## Next Steps
+
+- [Getting Started Guide](/plugins/getting-started) - Create your first plugin
+- [Plugin SDK Reference](/plugins/plugin-sdk) - Complete API documentation
+- [Hooks](/plugins/hooks) - Implement lifecycle hooks
+- [Tools](/plugins/tools) - Add custom agent tools
+- [Channels](/plugins/channels) - Build channel integrations

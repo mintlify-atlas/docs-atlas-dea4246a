@@ -1,0 +1,306 @@
+---
+title: iOS App
+summary: iOS companion node app with Canvas, camera, voice wake, and Gateway pairing
+---
+
+# iOS App
+
+<Warning>
+**Super-Alpha Status**: The iOS app is in internal preview. No TestFlight or App Store distribution is available yet. Breaking changes are expected.
+</Warning>
+
+## What it does
+
+The OpenClaw iOS app connects to a Gateway as a **mobile node**:
+
+- Connects to Gateway over WebSocket (LAN or Tailscale)
+- Exposes node capabilities: Canvas, Camera, Screen snapshot, Location, Talk mode, Voice wake
+- Receives `node.invoke` commands from agents
+- Shares chat history with other clients via Gateway sessions
+
+## Requirements
+
+- **Gateway**: Running on macOS, Linux, or Windows (WSL2)
+- **Network path**:
+  - Same LAN via Bonjour discovery, **or**
+  - Tailscale tailnet with unicast DNS-SD (e.g., `openclaw.internal.`), **or**
+  - Manual host/port configuration
+- **iOS**: iPhone running iOS 17+ (foreground-first; background limits apply)
+
+## Installation
+
+### TestFlight
+
+<Warning>
+**NO TESTFLIGHT AVAILABLE AT THIS POINT**
+
+Current distribution is manual deploy from source via Xcode only.
+</Warning>
+
+### Build from source
+
+Requirements:
+- Xcode 16+
+- pnpm
+- xcodegen
+- Apple Development signing identity
+
+```bash
+# From repository root
+pnpm install
+
+# Configure signing and generate project
+./scripts/ios-configure-signing.sh
+cd apps/ios
+xcodegen generate
+open OpenClaw.xcodeproj
+```
+
+In Xcode:
+1. Select scheme: **OpenClaw**
+2. Select destination: Connected iPhone (recommended for real behavior)
+3. Build configuration: **Debug**
+4. Product → Run
+
+Shortcut command:
+```bash
+pnpm ios:open
+```
+
+#### Signing with personal team
+
+If signing fails on a personal team:
+1. Copy `apps/ios/LocalSigning.xcconfig.example` to `apps/ios/LocalSigning.xcconfig`
+2. Edit `LocalSigning.xcconfig` to use unique local bundle IDs
+3. Regenerate project: `xcodegen generate`
+
+## Node pairing
+
+### Quick start
+
+1. Start the Gateway:
+```bash
+openclaw gateway --port 18789
+```
+
+2. In iOS app Settings, select a discovered gateway (or enable Manual Host and enter host/port)
+
+3. Approve pairing on gateway host:
+```bash
+openclaw nodes pending
+openclaw nodes approve <requestId>
+```
+
+4. Verify connection:
+```bash
+openclaw nodes status
+openclaw gateway call node.list --params "{}"
+```
+
+### Discovery
+
+**Bonjour (LAN)**: Gateway advertises `_openclaw-gw._tcp` on `local.`. iOS app lists these automatically.
+
+**Tailnet (cross-network)**: If mDNS is blocked, use unicast DNS-SD:
+1. Set up DNS-SD zone (e.g., `openclaw.internal.`) on gateway host
+2. Publish `_openclaw-gw._tcp` records via CoreDNS
+3. Configure Tailscale split DNS for the domain
+
+See [Bonjour](/gateway/bonjour) for CoreDNS example.
+
+**Manual host/port**: In Settings, enable **Manual Host** and enter gateway host + port (default 18789).
+
+## Canvas support
+
+The iOS node renders a WKWebView canvas:
+
+```bash
+# Navigate to Gateway canvas workspace
+openclaw nodes invoke --node "iPhone" --command canvas.navigate --params '{"url":"http://<gateway-host>:18789/__openclaw__/canvas/"}'
+
+# Evaluate JavaScript
+openclaw nodes invoke --node "iPhone" --command canvas.eval --params '{"javaScript":"document.body.style.background='#ff2d55'"}'
+
+# Take snapshot
+openclaw nodes invoke --node "iPhone" --command canvas.snapshot --params '{"maxWidth":900,"format":"jpeg"}'
+```
+
+Notes:
+- Gateway canvas host serves `/__openclaw__/canvas/` and `/__openclaw__/a2ui/`
+- Auto-navigates to A2UI on connect when canvas host URL is advertised
+- Return to built-in scaffold: `canvas.navigate` with `{"url":""}`
+- Canvas commands blocked when app is backgrounded
+
+## Camera and screen sharing
+
+### Camera capture
+
+Requires Camera permission (Settings → Privacy & Security → Camera).
+
+```bash
+# Snap photo
+openclaw nodes invoke --node "iPhone" --command camera.snap --params '{}'
+
+# Record clip (5 seconds)
+openclaw nodes invoke --node "iPhone" --command camera.clip --params '{"durationSeconds":5,"includeAudio":true}'
+```
+
+Camera commands blocked when app is backgrounded.
+
+### Screen recording
+
+```bash
+# Start recording
+openclaw nodes invoke --node "iPhone" --command screen.record --params '{"durationSeconds":10}'
+```
+
+Screen recording blocked when app is backgrounded.
+
+## Voice wake and talk mode
+
+Voice wake:
+- "Hey OpenClaw" hands-free activation
+- Uses on-device speech recognition (iOS Speech framework)
+- Configurable in Settings → Voice
+- Best-effort when app is backgrounded (iOS may suspend audio)
+
+Talk mode:
+- Push-to-talk voice input
+- Voice Wake and Talk contend for microphone (Talk suppresses wake while active)
+- Foreground-first reliability
+
+## Chat integration
+
+iOS node uses Gateway's **main session key** by default:
+- History shared with WebChat, macOS app, and other clients
+- Commands: `chat.history`, `chat.send`, `chat.subscribe`
+- Push updates via `event:"chat"` subscription
+
+Switch sessions via session picker in Chat view.
+
+## Node capabilities
+
+Foreground-only commands:
+- `canvas.*` (navigate, eval, snapshot, a2ui)
+- `camera.*` (snap, clip)
+- `screen.*` (record)
+- `talk.*` (start, stop)
+
+Background-capable commands:
+- `location.current` (requires "Always" location permission for background)
+- `contacts.list`, `contacts.search`
+- `calendar.events`
+- `reminders.list`
+- `photos.recent`
+- `motion.current`
+- `system.notify` (local notifications)
+
+The node reports capability states in `node.list` response.
+
+## Push notifications (APNs)
+
+The app registers for APNs at launch:
+- Development builds: APNs sandbox
+- Release builds: APNs production
+- Token sent to Gateway after connection: `push.apns.register`
+- Requires Push Notifications capability in provisioning profile
+
+If registration fails:
+1. Check Xcode console for "APNs registration failed"
+2. Verify Push Notifications enabled in app bundle ID
+3. Ensure provisioning profile supports Push
+
+APNs entitlement: `apps/ios/Sources/OpenClaw.entitlements` sets `aps-environment` to `development`.
+
+## Known issues and limitations
+
+<Warning>
+**Foreground-first**: iOS can suspend sockets in background. Reconnect recovery is still being tuned.
+</Warning>
+
+Current limitations:
+- Background command blocks: `canvas.*`, `camera.*`, `screen.*`, `talk.*` return `NODE_BACKGROUND_UNAVAILABLE`
+- Background location requires "Always" permission
+- Pairing/auth errors pause reconnect loop until fixed manually
+- Voice Wake and Talk contend for microphone
+- APNs reliability depends on signing/provisioning/topic alignment
+- Expect rough UX edges during active development
+
+## Troubleshooting
+
+### Build/signing baseline
+
+1. Regenerate project:
+```bash
+cd apps/ios
+xcodegen generate
+```
+
+2. Verify selected team and bundle IDs in Xcode
+
+### Gateway connection
+
+1. In app Settings → Gateway:
+   - Confirm status text, server, remote address
+   - Check if pairing/auth is gating connection
+
+2. If pairing required:
+```bash
+openclaw nodes pending
+openclaw nodes approve <requestId>
+```
+
+3. If discovery is flaky:
+   - Enable "Discovery Debug Logs" in Settings
+   - Inspect Settings → Gateway → Discovery Logs
+
+4. If network path unclear:
+   - Switch to Manual Host + port in Gateway Advanced settings
+   - Test with explicit IP: `http://192.168.1.x:18789`
+
+### Node commands fail
+
+**Error: `NODE_BACKGROUND_UNAVAILABLE`**
+- Bring iOS app to foreground
+- Canvas/camera/screen commands require active app
+
+**Error: `A2UI_HOST_NOT_CONFIGURED`**
+- Gateway didn't advertise canvas host URL
+- Check `gateway.canvasHost` in Gateway configuration
+
+**Error: Pairing prompt never appears**
+- Run `openclaw nodes pending` on gateway host
+- Approve manually: `openclaw nodes approve <requestId>`
+
+**Error: Reconnect fails after reinstall**
+- Keychain pairing token cleared
+- Re-pair the node from Settings
+
+### Debugging logs
+
+In Xcode console, filter for:
+- Subsystem: `ai.openclaw.ios`
+- Category: `GatewayDiag`
+- Search: "APNs registration failed"
+
+Validate background behavior:
+1. Reproduce in foreground first
+2. Test background transitions
+3. Confirm reconnect on return to foreground
+
+## Current development focus
+
+Automatic wake/reconnect hardening:
+- Improve wake/resume across scene transitions
+- Reduce dead-socket states after background → foreground
+- Tighten node/operator session reconnect coordination
+- Reduce manual recovery steps after transient network failures
+
+## Related documentation
+
+- [Gateway pairing](/gateway/pairing)
+- [Gateway discovery](/gateway/discovery)
+- [Bonjour setup](/gateway/bonjour)
+- [Node commands](/nodes)
+- [Camera node](/nodes/camera)
+- [Canvas protocol](/nodes/canvas)

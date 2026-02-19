@@ -1,0 +1,628 @@
+---
+title: "Events"
+description: "Event types, subscriptions, event streaming, and channel events"
+---
+
+# Events API
+
+The OpenClaw Gateway broadcasts real-time events to connected WebSocket clients for agent responses, system health, device pairing, and more.
+
+## Event Format
+
+All events follow this structure:
+
+```json
+{
+  "event": "event.name",
+  "payload": {
+    "key": "value"
+  }
+}
+```
+
+<ResponseField name="event" type="string">
+  Event type identifier
+</ResponseField>
+
+<ResponseField name="payload" type="object">
+  Event-specific data
+</ResponseField>
+
+## Agent Events
+
+### Event: `agent`
+
+Agent response chunks during execution.
+
+**Assistant text stream:**
+
+```json
+{
+  "event": "agent",
+  "payload": {
+    "runId": "run-123",
+    "stream": "assistant",
+    "data": {
+      "type": "text",
+      "text": "Hello! "
+    }
+  }
+}
+```
+
+**Tool invocation:**
+
+```json
+{
+  "event": "agent",
+  "payload": {
+    "runId": "run-123",
+    "stream": "tool",
+    "data": {
+      "phase": "start",
+      "name": "web_search",
+      "toolCallId": "call-456",
+      "input": { "query": "OpenClaw" }
+    }
+  }
+}
+```
+
+**Lifecycle:**
+
+```json
+{
+  "event": "agent",
+  "payload": {
+    "runId": "run-123",
+    "stream": "lifecycle",
+    "data": {
+      "phase": "end"
+    }
+  }
+}
+```
+
+See [Agent Protocol](/api/agent-protocol) for details.
+
+## Chat Events
+
+### Event: `chat`
+
+WebChat session updates.
+
+```json
+{
+  "event": "chat",
+  "payload": {
+    "sessionId": "session-123",
+    "type": "message",
+    "message": {
+      "role": "assistant",
+      "content": "Hello!"
+    }
+  }
+}
+```
+
+## System Events
+
+### Event: `presence`
+
+System presence changes (nodes connecting/disconnecting).
+
+```json
+{
+  "event": "presence",
+  "payload": {
+    "nodes": [
+      {
+        "id": "node-123",
+        "name": "iPhone",
+        "online": true,
+        "lastSeen": 1234567890000
+      }
+    ],
+    "version": 42
+  }
+}
+```
+
+<ResponseField name="nodes" type="array">
+  Array of node presence objects
+</ResponseField>
+
+<ResponseField name="version" type="number">
+  Presence version for change tracking
+</ResponseField>
+
+### Event: `health`
+
+Gateway health status updates.
+
+```json
+{
+  "event": "health",
+  "payload": {
+    "status": "healthy",
+    "channels": [
+      {
+        "id": "signal",
+        "status": "connected",
+        "account": "+1234567890"
+      },
+      {
+        "id": "telegram",
+        "status": "disconnected",
+        "error": "Not logged in"
+      }
+    ],
+    "version": 10
+  }
+}
+```
+
+<ResponseField name="status" type="string">
+  Overall health: `"healthy"`, `"degraded"`, `"unhealthy"`
+</ResponseField>
+
+<ResponseField name="channels" type="array">
+  Channel health status
+</ResponseField>
+
+<ResponseField name="version" type="number">
+  Health version for change tracking
+</ResponseField>
+
+### Event: `tick`
+
+Periodic heartbeat to keep connections alive.
+
+```json
+{
+  "event": "tick",
+  "payload": {
+    "timestamp": 1234567890000
+  }
+}
+```
+
+### Event: `heartbeat`
+
+Client heartbeat acknowledgment.
+
+```json
+{
+  "event": "heartbeat",
+  "payload": {
+    "timestamp": 1234567890000
+  }
+}
+```
+
+### Event: `shutdown`
+
+Gateway is shutting down.
+
+```json
+{
+  "event": "shutdown",
+  "payload": {
+    "reason": "Gateway restart requested"
+  }
+}
+```
+
+Clients should close connections and attempt reconnection.
+
+## Device Pairing Events
+
+### Event: `node.pair.requested`
+
+New device pairing request.
+
+```json
+{
+  "event": "node.pair.requested",
+  "payload": {
+    "nodeId": "node-123",
+    "name": "Alice's iPhone",
+    "platform": "ios",
+    "requestedAt": 1234567890000
+  }
+}
+```
+
+<ResponseField name="nodeId" type="string">
+  Unique node identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Device name
+</ResponseField>
+
+<ResponseField name="platform" type="string">
+  Platform: `"ios"`, `"android"`, `"macos"`, `"linux"`, `"windows"`
+</ResponseField>
+
+### Event: `node.pair.resolved`
+
+Device pairing resolved (approved/rejected).
+
+```json
+{
+  "event": "node.pair.resolved",
+  "payload": {
+    "nodeId": "node-123",
+    "approved": true,
+    "token": "device-token-abc123"
+  }
+}
+```
+
+<ResponseField name="approved" type="boolean">
+  Whether pairing was approved
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  Device token (when approved)
+</ResponseField>
+
+### Event: `device.pair.requested`
+
+Device pairing request (alternative format).
+
+```json
+{
+  "event": "device.pair.requested",
+  "payload": {
+    "deviceId": "device-123",
+    "name": "Desktop Client",
+    "challenge": "123456"
+  }
+}
+```
+
+### Event: `device.pair.resolved`
+
+Device pairing resolved.
+
+```json
+{
+  "event": "device.pair.resolved",
+  "payload": {
+    "deviceId": "device-123",
+    "approved": true
+  }
+}
+```
+
+## Voice Events
+
+### Event: `talk.mode`
+
+Voice mode changed.
+
+```json
+{
+  "event": "talk.mode",
+  "payload": {
+    "mode": "push-to-talk",
+    "enabled": true
+  }
+}
+```
+
+<ResponseField name="mode" type="string">
+  Voice mode: `"push-to-talk"`, `"voice-wake"`, `"always-on"`
+</ResponseField>
+
+<ResponseField name="enabled" type="boolean">
+  Whether voice is enabled
+</ResponseField>
+
+### Event: `voicewake.changed`
+
+Voice wake triggers updated.
+
+```json
+{
+  "event": "voicewake.changed",
+  "payload": {
+    "triggers": ["hey openclaw", "hello openclaw"]
+  }
+}
+```
+
+## Execution Approval Events
+
+### Event: `exec.approval.requested`
+
+Execution approval requested for sensitive commands.
+
+```json
+{
+  "event": "exec.approval.requested",
+  "payload": {
+    "requestId": "req-123",
+    "command": "rm -rf /dangerous/path",
+    "requestedAt": 1234567890000,
+    "requestedBy": "agent-run-456"
+  }
+}
+```
+
+<ResponseField name="requestId" type="string">
+  Unique approval request ID
+</ResponseField>
+
+<ResponseField name="command" type="string">
+  Command requiring approval
+</ResponseField>
+
+### Event: `exec.approval.resolved`
+
+Execution approval resolved.
+
+```json
+{
+  "event": "exec.approval.resolved",
+  "payload": {
+    "requestId": "req-123",
+    "approved": false,
+    "reason": "User rejected"
+  }
+}
+```
+
+## Cron Events
+
+### Event: `cron`
+
+Cron job status update.
+
+```json
+{
+  "event": "cron",
+  "payload": {
+    "id": "daily-report",
+    "status": "running",
+    "startedAt": 1234567890000
+  }
+}
+```
+
+<ResponseField name="id" type="string">
+  Cron job identifier
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Status: `"running"`, `"completed"`, `"failed"`
+</ResponseField>
+
+## Update Events
+
+### Event: `update.available`
+
+Software update available.
+
+```json
+{
+  "event": "update.available",
+  "payload": {
+    "version": "2026.3.1",
+    "releaseNotes": "Bug fixes and improvements",
+    "downloadUrl": "https://..."
+  }
+}
+```
+
+## Connection Challenge
+
+### Event: `connect.challenge`
+
+Sent during device pairing to display challenge code.
+
+```json
+{
+  "event": "connect.challenge",
+  "payload": {
+    "challenge": "123456",
+    "expiresAt": 1234567890000
+  }
+}
+```
+
+<ResponseField name="challenge" type="string">
+  6-digit challenge code to display to user
+</ResponseField>
+
+<ResponseField name="expiresAt" type="number">
+  Expiration timestamp (milliseconds)
+</ResponseField>
+
+## Event Subscriptions
+
+Most events are automatically broadcast to all connected clients. For session-specific events, use subscriptions:
+
+### Subscribe to Session
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 40,
+  "method": "node.subscribe",
+  "params": {
+    "sessionKey": "user:alice"
+  }
+}
+```
+
+### Unsubscribe from Session
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 41,
+  "method": "node.unsubscribe",
+  "params": {
+    "sessionKey": "user:alice"
+  }
+}
+```
+
+## Example: Event Listener
+
+```javascript
+const ws = new WebSocket('ws://localhost:18789');
+
+const eventHandlers = {
+  agent: (payload) => {
+    if (payload.stream === 'assistant') {
+      process.stdout.write(payload.data.text);
+    } else if (payload.stream === 'tool') {
+      console.log('Tool:', payload.data.name, payload.data.phase);
+    }
+  },
+  
+  health: (payload) => {
+    console.log('Health:', payload.status);
+    console.log('Channels:', payload.channels);
+  },
+  
+  presence: (payload) => {
+    console.log('Nodes:', payload.nodes.map(n => `${n.name} (${n.online ? 'online' : 'offline'})`));
+  },
+  
+  'node.pair.requested': (payload) => {
+    console.log(`Pairing request from ${payload.name} (${payload.nodeId})`);
+    // Approve/reject via node.pair.approve / node.pair.reject
+  },
+  
+  shutdown: (payload) => {
+    console.log('Gateway shutting down:', payload.reason);
+    ws.close();
+  },
+  
+  tick: (payload) => {
+    // Heartbeat - keep connection alive
+  }
+};
+
+ws.on('message', (data) => {
+  const frame = JSON.parse(data);
+  
+  if (frame.event) {
+    const handler = eventHandlers[frame.event];
+    if (handler) {
+      handler(frame.payload);
+    } else {
+      console.log('Unhandled event:', frame.event);
+    }
+  } else {
+    // RPC response
+    console.log('Response:', frame);
+  }
+});
+```
+
+## Event Filtering
+
+Clients receive all events by default. To filter events client-side:
+
+```javascript
+const interestedEvents = new Set(['agent', 'health', 'presence']);
+
+ws.on('message', (data) => {
+  const frame = JSON.parse(data);
+  
+  if (frame.event && !interestedEvents.has(frame.event)) {
+    return; // Ignore
+  }
+  
+  // Handle event
+});
+```
+
+## Event Ordering
+
+Events are delivered in the order they occur, but:
+
+- **Agent events** for the same `runId` are strictly ordered
+- **System events** may be interleaved with agent events
+- **Network delays** may affect perceived ordering
+
+Use event timestamps and version numbers for ordering guarantees.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Handle all lifecycle phases">
+    Always handle `start`, `end`, and `error` phases for agent runs:
+    
+    ```javascript
+    if (payload.stream === 'lifecycle') {
+      if (payload.data.phase === 'start') {
+        // Initialize
+      } else if (payload.data.phase === 'end') {
+        // Finalize
+      } else if (payload.data.phase === 'error') {
+        // Handle error
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Accumulate text streams">
+    Buffer assistant text chunks to display complete responses:
+    
+    ```javascript
+    const responses = new Map();
+    
+    if (payload.stream === 'assistant') {
+      const current = responses.get(runId) || '';
+      responses.set(runId, current + payload.data.text);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Respond to shutdown events">
+    Gracefully close connections and attempt reconnection:
+    
+    ```javascript
+    if (frame.event === 'shutdown') {
+      ws.close();
+      setTimeout(() => reconnect(), 5000);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Track presence versions">
+    Use version numbers to detect missed updates:
+    
+    ```javascript
+    let lastPresenceVersion = 0;
+    
+    if (frame.event === 'presence') {
+      if (frame.payload.version > lastPresenceVersion + 1) {
+        // Missed updates - fetch full state
+      }
+      lastPresenceVersion = frame.payload.version;
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="WebSocket Protocol" icon="plug" href="/api/websocket">
+    Learn WebSocket connection details
+  </Card>
+  <Card title="Agent Protocol" icon="robot" href="/api/agent-protocol">
+    Invoke agents and handle responses
+  </Card>
+  <Card title="Device Pairing" icon="mobile" href="/gateway/device-pairing">
+    Pair mobile and desktop devices
+  </Card>
+</CardGroup>

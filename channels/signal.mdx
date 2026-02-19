@@ -1,0 +1,435 @@
+---
+title: Signal Channel
+description: Connect OpenClaw to Signal using signal-cli with phone number registration
+---
+
+Signal integration requires [signal-cli](https://github.com/AsamK/signal-cli), a command-line interface for Signal. This provides end-to-end encrypted messaging with full support for DMs, groups, reactions, and media.
+
+## Prerequisites
+
+- A dedicated phone number for the bot (cannot be your personal Signal number)
+- signal-cli installed on your system
+- Java Runtime Environment (JRE) 17 or newer
+
+<Warning>
+  You cannot use your personal Signal number with signal-cli. You need a separate phone number that is not already registered with Signal.
+</Warning>
+
+## Quick Start
+
+The interactive onboarding can guide you through Signal setup:
+
+```bash
+openclaw init
+```
+
+Select Signal and follow the prompts.
+
+## Installing signal-cli
+
+### macOS (Homebrew)
+
+```bash
+brew install signal-cli
+```
+
+### Ubuntu/Debian
+
+```bash
+# Add repository
+sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/signal-cli.gpg] https://updates.signal.org/linux/apt xenial main" > /etc/apt/sources.list.d/signal-cli.list'
+
+# Add signing key
+wget -O- https://updates.signal.org/linux/signing-key.asc | gpg --dearmor | sudo tee /usr/share/keyrings/signal-cli.gpg > /dev/null
+
+# Install
+sudo apt update
+sudo apt install signal-cli
+```
+
+### From Binary
+
+1. Download the latest release from [signal-cli releases](https://github.com/AsamK/signal-cli/releases)
+2. Extract: `tar xf signal-cli-*.tar.gz`
+3. Add to PATH or use full path in config
+
+### Verify Installation
+
+```bash
+signal-cli --version
+```
+
+You should see output like: `signal-cli 0.11.12`
+
+## Registering a Signal Number
+
+<Steps>
+  <Step title="Register your number">
+    Replace `+15555550123` with your bot's phone number (E.164 format):
+
+    ```bash
+    signal-cli -a +15555550123 register
+    ```
+
+    You'll receive an SMS with a verification code.
+  </Step>
+
+  <Step title="Verify with code">
+    Enter the verification code you received:
+
+    ```bash
+    signal-cli -a +15555550123 verify 123-456
+    ```
+
+    (Replace `123-456` with the actual code)
+  </Step>
+
+  <Step title="Test the connection">
+    Send a test message to yourself:
+
+    ```bash
+    signal-cli -a +15555550123 send -m "Test message" +15555550123
+    ```
+  </Step>
+</Steps>
+
+## Linking as a Secondary Device (Alternative)
+
+If you prefer to link signal-cli as a secondary device:
+
+```bash
+signal-cli link -n "OpenClaw"
+```
+
+This will display a QR code. Scan it with Signal on your phone:
+1. Open Signal → Settings → Linked Devices
+2. Tap "+" to add a device
+3. Scan the QR code
+
+After linking, get your registered number:
+
+```bash
+signal-cli listAccounts
+```
+
+## Configuration
+
+### Basic Setup
+
+Configure Signal in `openclaw.config.json`:
+
+```json
+{
+  "channels": {
+    "signal": {
+      "enabled": true,
+      "account": "+15555550123",
+      "cliPath": "signal-cli",
+      "dmPolicy": "pairing",
+      "allowFrom": []
+    }
+  }
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable Signal channel |
+| `account` | string | - | Bot's phone number in E.164 format (e.g., `+15555550123`) |
+| `cliPath` | string | `"signal-cli"` | Path to signal-cli binary |
+| `dmPolicy` | string | `"pairing"` | DM access policy: `pairing`, `allowlist`, `open`, `disabled` |
+| `allowFrom` | string[] | `[]` | Allowed sender identifiers (phone numbers or UUIDs) |
+
+### DM Policies
+
+- **`pairing`** (recommended): Unknown senders get a pairing code; approve with `openclaw pairing approve signal <identifier>`
+- **`allowlist`**: Only senders in `allowFrom` can message
+- **`open`**: Anyone can message (set `allowFrom: ["*"]`)
+- **`disabled`**: Ignore all Signal DMs
+
+### AllowFrom Formats
+
+Signal supports two identifier formats:
+
+**Phone numbers (E.164 format):**
+```json
+{
+  "channels": {
+    "signal": {
+      "allowFrom": ["+15555550123", "+447700900123"]
+    }
+  }
+}
+```
+
+**UUIDs (Signal's internal identifier):**
+```json
+{
+  "channels": {
+    "signal": {
+      "allowFrom": [
+        "uuid:123e4567-e89b-12d3-a456-426614174000",
+        "uuid:987fcdeb-51a2-43d3-b789-123456789abc"
+      ]
+    }
+  }
+}
+```
+
+UUIDs are more reliable as they don't change when a user changes their phone number.
+
+## Group Configuration
+
+Signal groups work automatically once configured. To restrict access or settings per group:
+
+```json
+{
+  "channels": {
+    "signal": {
+      "groups": {
+        "group-id-base64": {
+          "enabled": true,
+          "requireMention": false,
+          "allowFrom": ["+15555550123"],
+          "toolPolicy": "allowlist"
+        }
+      }
+    }
+  }
+}
+```
+
+Get group IDs with:
+
+```bash
+signal-cli -a +15555550123 listGroups
+```
+
+## Media Handling
+
+Signal supports:
+- Images (JPEG, PNG, GIF)
+- Videos (MP4)
+- Audio files
+- Voice messages
+- Documents
+
+Media is automatically downloaded and processed.
+
+## Reactions
+
+Signal supports emoji reactions:
+
+```json
+{
+  "channels": {
+    "signal": {
+      "reactions": {
+        "enabled": true
+      }
+    }
+  }
+}
+```
+
+## Multi-Account Support
+
+You can configure multiple Signal accounts:
+
+```json
+{
+  "channels": {
+    "signal": {
+      "accounts": {
+        "personal": {
+          "enabled": true,
+          "account": "+15555550123",
+          "allowFrom": ["+15555550456"]
+        },
+        "work": {
+          "enabled": true,
+          "account": "+15555550789",
+          "allowFrom": ["+15555551234"]
+        }
+      }
+    }
+  }
+}
+```
+
+Each account must be registered separately with signal-cli.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="signal-cli not found">
+    Ensure signal-cli is installed and in your PATH:
+
+    ```bash
+    which signal-cli
+    ```
+
+    If not found, either:
+    1. Add signal-cli to your PATH
+    2. Specify the full path in config:
+
+    ```json
+    {
+      "channels": {
+        "signal": {
+          "cliPath": "/usr/local/bin/signal-cli"
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Registration failed">
+    Common issues:
+
+    - **Number already registered**: Cannot use a number already registered to Signal
+    - **Invalid number format**: Must be E.164 format (e.g., `+15555550123`)
+    - **SMS not received**: Check phone number is correct and can receive SMS
+    - **Rate limited**: Wait 24 hours before retrying
+
+    For virtual numbers (e.g., Google Voice), Signal may reject registration.
+  </Accordion>
+
+  <Accordion title="Verification code invalid">
+    - Ensure you're using the exact code from SMS (including dashes if present)
+    - Code expires after 10 minutes - request a new one if expired
+    - Don't add extra spaces or characters
+
+    Request a new code:
+
+    ```bash
+    signal-cli -a +15555550123 register
+    ```
+  </Accordion>
+
+  <Accordion title="Messages not being received">
+    Check status with probe:
+
+    ```bash
+    openclaw channels status --probe
+    ```
+
+    Common issues:
+    - signal-cli daemon not running
+    - Sender not in `allowFrom` (if using allowlist policy)
+    - Check logs: `openclaw logs --follow | grep signal`
+
+    Restart signal-cli:
+
+    ```bash
+    signal-cli -a +15555550123 daemon
+    ```
+  </Accordion>
+
+  <Accordion title="Cannot send messages">
+    Ensure recipient is registered with Signal:
+
+    ```bash
+    signal-cli -a +15555550123 getUserStatus +15555550456
+    ```
+
+    If not registered, you'll see an error. They must install Signal first.
+  </Accordion>
+
+  <Accordion title="Groups not working">
+    Ensure:
+    1. Bot is a member of the group
+    2. Group ID is correctly configured
+    3. Group policy allows messages
+
+    List groups:
+
+    ```bash
+    signal-cli -a +15555550123 listGroups -d
+    ```
+
+    Join a group (if you have an invite link):
+
+    ```bash
+    signal-cli -a +15555550123 joinGroup --uri "https://signal.group/..."
+    ```
+  </Accordion>
+
+  <Accordion title="Linked device disconnected">
+    If you linked as a secondary device and it disconnects:
+
+    1. Unlink old device in Signal app
+    2. Run `signal-cli link -n "OpenClaw"` again
+    3. Scan new QR code
+
+    Primary registration is more stable than linking.
+  </Accordion>
+</AccordionGroup>
+
+## Running signal-cli Daemon
+
+For production use, run signal-cli as a daemon:
+
+```bash
+# Start daemon
+signal-cli -a +15555550123 daemon
+
+# Or as systemd service (Linux)
+sudo systemctl start signal-cli
+```
+
+OpenClaw will communicate with the daemon via DBus (Linux) or direct socket (macOS).
+
+## Security Considerations
+
+- **End-to-end encryption** is maintained through signal-cli
+- **Registration credentials** are stored in `~/.local/share/signal-cli/data/` by default
+- **Backup credentials** regularly - you cannot recover them if lost
+- **Use a dedicated number** - don't share with other services
+- **Use allowlist mode** for production bots with known users
+
+## Advanced Configuration
+
+### Custom Data Directory
+
+```json
+{
+  "channels": {
+    "signal": {
+      "dataDir": "/path/to/signal-cli/data"
+    }
+  }
+}
+```
+
+### Daemon Socket Path
+
+```json
+{
+  "channels": {
+    "signal": {
+      "socketPath": "/var/run/signal-cli/socket"
+    }
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="iMessage Setup" icon="message" href="/channels/imessage">
+    Set up iMessage on macOS
+  </Card>
+  
+  <Card title="Pairing Guide" icon="qrcode" href="/channels/pairing">
+    Learn about pairing codes and approvals
+  </Card>
+  
+  <Card title="Configuration Reference" icon="gear" href="/configuration">
+    Full configuration options
+  </Card>
+  
+  <Card title="Multi-Channel" icon="network-wired" href="/channels/overview">
+    Using multiple channels together
+  </Card>
+</CardGroup>

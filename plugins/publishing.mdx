@@ -1,0 +1,461 @@
+---
+title: "Publishing Plugins"
+description: "Share your OpenClaw plugins on npm"
+---
+
+Once you've built a plugin, you can share it with the community by publishing to npm. This guide covers packaging, versioning, and publishing OpenClaw plugins.
+
+## Package Structure
+
+A publishable plugin should have this structure:
+
+```
+my-plugin/
+  package.json
+  index.ts          # Entry point
+  src/              # Plugin source
+  README.md         # Documentation
+  LICENSE           # License file
+  .npmignore        # npm publish exclusions
+```
+
+## package.json
+
+Configure your `package.json` for publishing:
+
+```json
+{
+  "name": "@openclaw/my-plugin",
+  "version": "1.0.0",
+  "description": "My OpenClaw plugin",
+  "type": "module",
+  "main": "index.ts",
+  "keywords": ["openclaw", "plugin", "ai", "gateway"],
+  "author": "Your Name <you@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/openclaw-plugin-my-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/openclaw-plugin-my-plugin/issues"
+  },
+  "homepage": "https://github.com/yourusername/openclaw-plugin-my-plugin#readme",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48"
+  },
+  "devDependencies": {
+    "openclaw": "latest"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.2.0"
+  },
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}
+```
+
+### Key Fields
+
+<ResponseField name="name" type="string" required>
+  Package name. Use the `@openclaw/` scope for official plugins:
+  - `@openclaw/my-plugin` (official)
+  - `openclaw-plugin-my-plugin` (community)
+  - `@yourscope/openclaw-my-plugin` (scoped)
+</ResponseField>
+
+<ResponseField name="version" type="string" required>
+  Version number following [semver](https://semver.org/):
+  - `1.0.0` - Initial release
+  - `1.1.0` - New features (backward compatible)
+  - `2.0.0` - Breaking changes
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  Module type. Set to `"module"` for ESM.
+</ResponseField>
+
+<ResponseField name="main" type="string" required>
+  Entry point. Use `index.ts` or `dist/index.js` (if compiled).
+</ResponseField>
+
+<ResponseField name="keywords" type="array" recommended>
+  Keywords for npm search. Include `"openclaw"` and `"plugin"`.
+</ResponseField>
+
+<ResponseField name="dependencies" type="object">
+  Runtime dependencies. Include only what your plugin needs at runtime.
+</ResponseField>
+
+<ResponseField name="devDependencies" type="object">
+  Development dependencies. Include `openclaw` for type imports.
+</ResponseField>
+
+<ResponseField name="peerDependencies" type="object" recommended>
+  Specify compatible OpenClaw versions:
+  ```json
+  {
+    "openclaw": ">=2026.2.0"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="openclaw" type="object" required>
+  OpenClaw metadata:
+  ```json
+  {
+    "extensions": ["./index.ts"],
+    "channel": {
+      "id": "my-channel",
+      "label": "My Channel"
+    }
+  }
+  ```
+</ResponseField>
+
+## Naming Conventions
+
+### Official Plugins
+
+Official plugins use the `@openclaw/` scope:
+
+- `@openclaw/matrix`
+- `@openclaw/msteams`
+- `@openclaw/voice-call`
+
+### Community Plugins
+
+Community plugins should use descriptive names:
+
+- `openclaw-plugin-slack-advanced`
+- `openclaw-jira-integration`
+- `@yourname/openclaw-custom-tool`
+
+### Channel Plugins
+
+Channel plugins should clearly indicate the platform:
+
+- `@openclaw/rocketchat`
+- `openclaw-plugin-zulip`
+
+### Tool Plugins
+
+Tool plugins should describe their capability:
+
+- `openclaw-plugin-github`
+- `openclaw-tool-database`
+- `@yourname/openclaw-crm`
+
+## README
+
+Include a comprehensive README:
+
+```markdown
+# @openclaw/my-plugin
+
+Brief description of what your plugin does.
+
+## Installation
+
+```bash
+openclaw plugins install @openclaw/my-plugin
+```
+
+## Configuration
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "my-plugin": {
+        "enabled": true,
+        "config": {
+          "apiKey": "your-api-key"
+        }
+      }
+    }
+  }
+}
+```
+
+## Usage
+
+Examples of how to use your plugin.
+
+## License
+
+MIT
+```
+
+## .npmignore
+
+Exclude unnecessary files from the package:
+
+```
+# Development files
+*.test.ts
+*.spec.ts
+tsconfig.json
+vitest.config.ts
+.eslintrc
+.prettierrc
+
+# Build artifacts
+*.log
+.DS_Store
+node_modules/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Documentation
+docs/
+examples/
+```
+
+## Versioning
+
+Follow [semantic versioning](https://semver.org/):
+
+### Major Version (X.0.0)
+
+Breaking changes:
+- Changed API signatures
+- Removed features
+- Incompatible with previous versions
+
+### Minor Version (1.X.0)
+
+New features (backward compatible):
+- New tools or capabilities
+- New configuration options
+- Enhanced functionality
+
+### Patch Version (1.0.X)
+
+Bug fixes:
+- Fixed bugs
+- Documentation updates
+- Performance improvements
+
+## Publishing to npm
+
+### 1. Create npm account
+
+Sign up at [npmjs.com](https://www.npmjs.com/) if you don't have an account.
+
+### 2. Login to npm
+
+Enter your credentials:
+
+```bash
+npm login
+```
+
+### 3. Build your plugin (if needed)
+
+If you compile TypeScript:
+
+```bash
+npm run build
+```
+
+### 4. Test the package
+
+Verify what will be published:
+
+```bash
+npm pack --dry-run
+```
+
+### 5. Publish
+
+For scoped packages:
+
+```bash
+npm publish --access public
+```
+
+For unscoped packages:
+
+```bash
+npm publish
+```
+
+## Publishing Updates
+
+To publish updates:
+
+1. **Update version:**
+   ```bash
+   npm version patch  # 1.0.0 -> 1.0.1
+   npm version minor  # 1.0.0 -> 1.1.0
+   npm version major  # 1.0.0 -> 2.0.0
+   ```
+
+2. **Publish:**
+   ```bash
+   npm publish
+   ```
+
+3. **Tag the release:**
+   ```bash
+   git tag v1.0.1
+   git push --tags
+   ```
+
+## Distribution Tags
+
+Use distribution tags for pre-releases:
+
+```bash
+# Publish beta version
+npm version 1.1.0-beta.1
+npm publish --tag beta
+
+# Users install with:
+# openclaw plugins install @openclaw/my-plugin@beta
+```
+
+Common tags:
+- `latest` - Stable releases (default)
+- `beta` - Beta releases
+- `next` - Development releases
+- `canary` - Nightly builds
+
+## Plugin Registry
+
+Official plugins are listed in OpenClaw's plugin registry. To submit your plugin:
+
+1. Publish to npm
+2. Open an issue at [openclaw/openclaw](https://github.com/openclaw/openclaw/issues)
+3. Include:
+   - Plugin name and npm package
+   - Description
+   - Documentation link
+   - Example configuration
+
+## Best Practices
+
+### 1. Documentation
+
+Provide clear documentation:
+- Installation instructions
+- Configuration examples
+- Usage examples
+- API reference
+- Troubleshooting
+
+### 2. Testing
+
+Include tests:
+```json
+{
+  "scripts": {
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "latest"
+  }
+}
+```
+
+### 3. TypeScript Types
+
+Include type definitions:
+```json
+{
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "index.ts",
+    "src/"
+  ]
+}
+```
+
+### 4. Changelog
+
+Maintain a CHANGELOG.md:
+```markdown
+# Changelog
+
+## [1.1.0] - 2026-02-19
+### Added
+- New feature X
+- Support for Y
+
+### Fixed
+- Bug in Z
+
+## [1.0.0] - 2026-02-01
+- Initial release
+```
+
+### 5. License
+
+Include a LICENSE file. Popular choices:
+- MIT (permissive)
+- Apache 2.0 (permissive with patent grant)
+- GPL (copyleft)
+
+### 6. CI/CD
+
+Automate testing and publishing:
+
+```yaml
+# .github/workflows/publish.yml
+name: Publish
+on:
+  release:
+    types: [created]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+      - run: npm ci
+      - run: npm test
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+```
+
+## Example: Publishing a Tool Plugin
+
+```bash
+# 1. Initialize project
+mkdir openclaw-plugin-github
+cd openclaw-plugin-github
+npm init -y
+
+# 2. Install dependencies
+npm install @sinclair/typebox
+npm install --save-dev openclaw typescript
+
+# 3. Write plugin (index.ts)
+# 4. Write README.md
+# 5. Create LICENSE
+
+# 6. Test locally
+openclaw plugins install ./
+
+# 7. Publish
+npm login
+npm publish --access public
+
+# 8. Install from npm
+openclaw plugins install openclaw-plugin-github
+```
+
+## Next Steps
+
+- [Plugin SDK Reference](/plugins/plugin-sdk) - Complete API documentation
+- [Examples](/plugins/examples) - Real-world plugin examples
+- [Built-in Extensions](/plugins/built-in-extensions) - Explore existing plugins

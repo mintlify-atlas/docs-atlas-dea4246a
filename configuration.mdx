@@ -1,0 +1,620 @@
+---
+title: "Configuration"
+description: "Configure OpenClaw's gateway, agents, channels, and security settings"
+---
+
+# Configuration
+
+OpenClaw is configured through a JSON file at `~/.openclaw/openclaw.json`. This guide covers the configuration file structure, common settings, and examples.
+
+## Configuration File Location
+
+By default, OpenClaw looks for configuration in:
+
+```
+~/.openclaw/openclaw.json
+```
+
+You can specify a custom location:
+
+```bash
+oclaw gateway --config /path/to/config.json
+```
+
+<Info>
+The config file uses JSON5 format, which supports comments and trailing commas.
+</Info>
+
+## Minimal Configuration
+
+The simplest configuration just specifies the AI model:
+
+```json
+{
+  "agent": {
+    "model": "anthropic/claude-opus-4-6"
+  }
+}
+```
+
+This uses all default values:
+- Gateway on port 18789
+- Localhost binding
+- No authentication (local-only access)
+- Main agent with default settings
+
+## Configuration Structure
+
+The configuration file has these top-level sections:
+
+```json
+{
+  "agent": {},        // AI model and agent configuration
+  "agents": {},       // Multi-agent setup
+  "gateway": {},      // Gateway server settings
+  "channels": {},     // Messaging channel configs
+  "browser": {},      // Browser automation settings
+  "tools": {},        // Tool configuration
+  "cron": {},         // Scheduled jobs
+  "hooks": {},        // Webhook configuration
+  "skills": {}        // Skills registry settings
+}
+```
+
+## Agent Configuration
+
+### Basic Model Setup
+
+```json
+{
+  "agent": {
+    "model": "anthropic/claude-opus-4-6"
+  }
+}
+```
+
+### Model with Fallbacks
+
+```json
+{
+  "agent": {
+    "model": {
+      "primary": "anthropic/claude-opus-4-6",
+      "fallbacks": [
+        "anthropic/claude-sonnet-4",
+        "openai/gpt-5-turbo"
+      ]
+    }
+  }
+}
+```
+
+### Agent Defaults
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "workspace": "~/.openclaw/workspace",
+      "model": "anthropic/claude-opus-4-6",
+      "thinkingLevel": "medium",
+      "sandbox": {
+        "mode": "non-main",
+        "scope": "session"
+      }
+    }
+  }
+}
+```
+
+<Note>
+The `sandbox.mode: "non-main"` setting runs group chat sessions in Docker containers for security, while direct DMs use host tools.
+</Note>
+
+## Gateway Configuration
+
+### Port and Binding
+
+```json
+{
+  "gateway": {
+    "port": 18789,
+    "bind": "loopback"
+  }
+}
+```
+
+Binding modes:
+- `loopback`: 127.0.0.1 (local only, most secure)
+- `lan`: 0.0.0.0 (all interfaces)
+- `tailnet`: Tailscale network
+- `custom`: Specific IP address
+
+### Authentication
+
+#### Token Authentication
+
+```json
+{
+  "gateway": {
+    "auth": {
+      "mode": "token",
+      "token": "your-secure-random-token-here"
+    }
+  }
+}
+```
+
+#### Password Authentication
+
+```json
+{
+  "gateway": {
+    "auth": {
+      "mode": "password",
+      "password": "your-secure-password"
+    }
+  }
+}
+```
+
+<Warning>
+Always use authentication when binding to anything other than localhost.
+</Warning>
+
+### TLS Configuration
+
+```json
+{
+  "gateway": {
+    "tls": {
+      "enabled": true,
+      "certPath": "~/.openclaw/certs/cert.pem",
+      "keyPath": "~/.openclaw/certs/key.pem",
+      "autoGenerate": true
+    }
+  }
+}
+```
+
+### Control UI
+
+```json
+{
+  "gateway": {
+    "controlUi": {
+      "enabled": true,
+      "basePath": "/",
+      "allowedOrigins": ["https://yourapp.com"]
+    }
+  }
+}
+```
+
+## Channel Configuration
+
+### WhatsApp
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "allowFrom": ["+1234567890", "+9876543210"],
+      "groups": ["*"]
+    }
+  }
+}
+```
+
+<Info>
+WhatsApp requires pairing via QR code. Run `openclaw channels login` to pair your device.
+</Info>
+
+### Telegram
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "botToken": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
+      "allowFrom": ["@username1", "@username2"],
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      }
+    }
+  }
+}
+```
+
+Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram.
+
+### Discord
+
+```json
+{
+  "channels": {
+    "discord": {
+      "token": "YOUR_DISCORD_BOT_TOKEN",
+      "allowFrom": ["user_id_1", "user_id_2"],
+      "guilds": {
+        "guild_id_here": {
+          "channels": ["channel_id_1", "channel_id_2"],
+          "requireMention": true
+        }
+      }
+    }
+  }
+}
+```
+
+### Slack
+
+```json
+{
+  "channels": {
+    "slack": {
+      "botToken": "xoxb-your-bot-token",
+      "appToken": "xapp-your-app-token",
+      "allowFrom": ["U01234567", "U98765432"]
+    }
+  }
+}
+```
+
+### Signal
+
+```json
+{
+  "channels": {
+    "signal": {
+      "account": "+1234567890",
+      "allowFrom": ["+9876543210"]
+    }
+  }
+}
+```
+
+<Note>
+Signal requires `signal-cli` to be installed and registered.
+</Note>
+
+### iMessage (macOS only)
+
+```json
+{
+  "channels": {
+    "imessage": {
+      "enabled": true,
+      "allowFrom": ["+1234567890", "email@example.com"],
+      "groups": ["*"]
+    }
+  }
+}
+```
+
+<Warning>
+Legacy iMessage integration requires macOS and the Messages app to be signed in. Consider using BlueBubbles for a more reliable integration.
+</Warning>
+
+## Multi-Agent Routing
+
+Route different channels or groups to specialized agents:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": "anthropic/claude-opus-4-6"
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "workspace": "~/.openclaw/workspace"
+      },
+      {
+        "id": "coding",
+        "model": "anthropic/claude-opus-4-6",
+        "workspace": "~/.openclaw/workspaces/coding",
+        "skills": ["git", "bash", "python"]
+      },
+      {
+        "id": "research",
+        "model": "openai/gpt-5-turbo",
+        "workspace": "~/.openclaw/workspaces/research",
+        "skills": ["browser", "search"]
+      }
+    ]
+  },
+  "routing": {
+    "bindings": [
+      {
+        "agentId": "coding",
+        "match": {
+          "channel": "discord",
+          "guildId": "123456789"
+        }
+      },
+      {
+        "agentId": "research",
+        "match": {
+          "channel": "telegram",
+          "peer": { "kind": "user", "id": "@researcher" }
+        }
+      }
+    ]
+  }
+}
+```
+
+## Security Settings
+
+### DM Pairing (Default)
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "dmPolicy": "pairing"
+    },
+    "discord": {
+      "dmPolicy": "pairing"
+    }
+  }
+}
+```
+
+Unknown senders receive a pairing code. Approve with:
+
+```bash
+oclaw pairing approve <channel> <code>
+```
+
+### Open DM Policy
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "dmPolicy": "open",
+      "allowFrom": ["*"]
+    }
+  }
+}
+```
+
+<Warning>
+Only use `dmPolicy: "open"` with `allowFrom: ["*"]` if you understand the security implications. Anyone can message your bot.
+</Warning>
+
+### Sandbox for Groups
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "sandbox": {
+        "mode": "non-main",
+        "scope": "session",
+        "workspaceAccess": "ro"
+      }
+    }
+  }
+}
+```
+
+This runs group chat sessions in isolated Docker containers.
+
+## Browser Automation
+
+```json
+{
+  "browser": {
+    "enabled": true,
+    "color": "#FF5A36",
+    "headless": true,
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    }
+  }
+}
+```
+
+## Cron Jobs
+
+```json
+{
+  "cron": {
+    "jobs": [
+      {
+        "id": "daily-summary",
+        "schedule": "0 9 * * *",
+        "message": "Generate a summary of yesterday's activity",
+        "deliverTo": {
+          "channel": "telegram",
+          "target": "@me"
+        }
+      }
+    ]
+  }
+}
+```
+
+Schedule format: [cron expression](https://crontab.guru/)
+
+## Environment Variables
+
+Environment variables override config file values:
+
+```bash
+# Gateway
+export OPENCLAW_GATEWAY_PORT=18789
+export OPENCLAW_GATEWAY_TOKEN=your-token
+
+# Telegram
+export TELEGRAM_BOT_TOKEN=your-bot-token
+
+# Discord
+export DISCORD_BOT_TOKEN=your-discord-token
+
+# Slack
+export SLACK_BOT_TOKEN=xoxb-your-bot-token
+export SLACK_APP_TOKEN=xapp-your-app-token
+```
+
+<Tip>
+Environment variables are useful for secrets in CI/CD pipelines and Docker deployments.
+</Tip>
+
+## Configuration Validation
+
+Validate your configuration file:
+
+```bash
+# Check for errors
+oclaw config validate
+
+# Show current config
+oclaw config show
+
+# Edit config
+oclaw config edit
+```
+
+## Configuration Management
+
+### Get a Value
+
+```bash
+oclaw config get gateway.port
+# Output: 18789
+```
+
+### Set a Value
+
+```bash
+oclaw config set gateway.port 18790
+oclaw config set agent.model "anthropic/claude-sonnet-4"
+```
+
+### Unset a Value
+
+```bash
+oclaw config unset channels.telegram.botToken
+```
+
+## Example Configurations
+
+### Single User, Telegram Only
+
+```json
+{
+  "agent": {
+    "model": "anthropic/claude-opus-4-6"
+  },
+  "channels": {
+    "telegram": {
+      "botToken": "123456789:ABCdef...",
+      "allowFrom": ["@myusername"]
+    }
+  }
+}
+```
+
+### Multi-Channel with Security
+
+```json
+{
+  "agent": {
+    "model": "anthropic/claude-opus-4-6"
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "secure-random-token"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "sandbox": {
+        "mode": "non-main",
+        "scope": "session"
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "botToken": "123456789:ABCdef...",
+      "dmPolicy": "pairing",
+      "groups": {
+        "*": { "requireMention": true }
+      }
+    },
+    "discord": {
+      "token": "discord-bot-token",
+      "dmPolicy": "pairing",
+      "guilds": {
+        "123456789": {
+          "requireMention": true
+        }
+      }
+    }
+  }
+}
+```
+
+### Remote VPS Deployment
+
+```json
+{
+  "agent": {
+    "model": "anthropic/claude-opus-4-6"
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "lan",
+    "auth": {
+      "mode": "password",
+      "password": "very-secure-password-here"
+    },
+    "tls": {
+      "enabled": true,
+      "certPath": "/etc/letsencrypt/live/gateway.example.com/cert.pem",
+      "keyPath": "/etc/letsencrypt/live/gateway.example.com/privkey.pem"
+    }
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "allowFrom": ["+1234567890"]
+    },
+    "telegram": {
+      "botToken": "...",
+      "allowFrom": ["@myuser"]
+    }
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Add Channels" icon="plug" href="/channels/overview">
+    Connect WhatsApp, Telegram, Discord, and more
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/architecture">
+    Learn about gateway, agents, and sessions
+  </Card>
+  <Card title="Security Guide" icon="shield" href="/guides/security">
+    Best practices for securing your gateway
+  </Card>
+  <Card title="Multi-Agent Setup" icon="users" href="/guides/multi-agent">
+    Route channels to specialized agents
+  </Card>
+</CardGroup>

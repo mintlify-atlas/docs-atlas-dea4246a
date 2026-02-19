@@ -1,0 +1,301 @@
+---
+title: "Getting Started"
+description: "Create your first OpenClaw plugin"
+---
+
+This guide walks you through creating your first OpenClaw plugin. We'll build a simple plugin that adds a custom agent tool.
+
+## Prerequisites
+
+- OpenClaw installed (Node 22+)
+- TypeScript knowledge
+- Basic understanding of OpenClaw concepts (agents, tools, sessions)
+
+## Project Setup
+
+<Steps>
+  <Step title="Create plugin directory">
+    Create a directory for your plugin:
+
+    ```bash
+    mkdir my-plugin
+    cd my-plugin
+    ```
+  </Step>
+
+  <Step title="Initialize package.json">
+    Create a `package.json`:
+
+    ```json
+    {
+      "name": "openclaw-plugin-hello",
+      "version": "1.0.0",
+      "type": "module",
+      "main": "index.ts",
+      "dependencies": {},
+      "devDependencies": {
+        "openclaw": "latest"
+      }
+    }
+    ```
+
+    **Note**: If you plan to publish to npm, use the `@openclaw/` scope: `@openclaw/my-plugin`.
+  </Step>
+
+  <Step title="Create plugin entry point">
+    Create `index.ts`:
+
+    ```typescript
+    import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+    import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+
+    const plugin = {
+      id: "hello",
+      name: "Hello Plugin",
+      description: "Example plugin with a custom tool",
+      configSchema: emptyPluginConfigSchema(),
+      register(api: OpenClawPluginApi) {
+        api.logger.info("Hello plugin registered");
+      }
+    };
+
+    export default plugin;
+    ```
+  </Step>
+
+  <Step title="Add the plugin to OpenClaw">
+    Edit your `~/.openclaw/config.json`:
+
+    ```json
+    {
+      "plugins": {
+        "entries": {
+          "hello": {
+            "enabled": true,
+            "source": "/path/to/my-plugin/index.ts"
+          }
+        }
+      }
+    }
+    ```
+
+    Or install from a local directory:
+
+    ```bash
+    openclaw plugins install /path/to/my-plugin
+    ```
+  </Step>
+
+  <Step title="Verify the plugin loads">
+    Restart the gateway and check logs:
+
+    ```bash
+    openclaw gateway run
+    ```
+
+    You should see: `Hello plugin registered`
+  </Step>
+</Steps>
+
+## Add a Custom Tool
+
+Let's add an agent tool that generates greetings:
+
+```typescript
+import type { OpenClawPluginApi, AnyAgentTool } from "openclaw/plugin-sdk";
+import { Type } from "@sinclair/typebox";
+
+function createGreetingTool(): AnyAgentTool {
+  return {
+    name: "greet",
+    description: "Generate a personalized greeting",
+    input: Type.Object({
+      name: Type.String({ description: "Name to greet" }),
+      style: Type.Optional(
+        Type.Union([Type.Literal("formal"), Type.Literal("casual")])
+      )
+    }),
+    execute: async (args) => {
+      const { name, style = "casual" } = args;
+      const greeting =
+        style === "formal"
+          ? `Good day, ${name}. How may I assist you?`
+          : `Hey ${name}! What's up?`;
+      return {
+        result: "success",
+        details: { greeting }
+      };
+    }
+  };
+}
+
+const plugin = {
+  id: "hello",
+  name: "Hello Plugin",
+  description: "Example plugin with a custom tool",
+  configSchema: emptyPluginConfigSchema(),
+  register(api: OpenClawPluginApi) {
+    api.registerTool(createGreetingTool());
+    api.logger.info("Greeting tool registered");
+  }
+};
+
+export default plugin;
+```
+
+### Tool Schema with TypeBox
+
+OpenClaw uses [@sinclair/typebox](https://github.com/sinclairzx81/typebox) for tool schemas. Common patterns:
+
+```typescript
+import { Type } from "@sinclair/typebox";
+
+// String
+Type.String({ description: "A text value" })
+
+// Number
+Type.Number({ description: "A numeric value", minimum: 0 })
+
+// Boolean
+Type.Boolean({ description: "True or false" })
+
+// Optional field
+Type.Optional(Type.String())
+
+// Enum (use Type.Union with Type.Literal for string enums)
+Type.Union([
+  Type.Literal("option1"),
+  Type.Literal("option2")
+])
+
+// Array
+Type.Array(Type.String())
+
+// Object
+Type.Object({
+  field1: Type.String(),
+  field2: Type.Number()
+})
+```
+
+## Test Your Tool
+
+Restart the gateway and send a message:
+
+```
+Greet Alice in a formal style
+```
+
+The agent should use the `greet` tool and respond with the generated greeting.
+
+## Add Tool Options
+
+You can mark tools as optional (requiring explicit allowlisting):
+
+```typescript
+api.registerTool(createGreetingTool(), { optional: true });
+```
+
+Then allowlist in agent config:
+
+```json
+{
+  "agents": {
+    "list": [
+      {
+        "id": "main",
+        "tools": { "allow": ["greet"] }
+      }
+    ]
+  }
+}
+```
+
+## Add Configuration
+
+Plugins can define configuration schemas:
+
+```typescript
+import { z } from "zod";
+
+const configSchema = z.object({
+  defaultStyle: z.enum(["formal", "casual"]).default("casual"),
+  prefix: z.string().default("")
+});
+
+const plugin = {
+  id: "hello",
+  configSchema: {
+    safeParse: (value) => configSchema.safeParse(value),
+    uiHints: {
+      defaultStyle: { label: "Default Style" },
+      prefix: { label: "Greeting Prefix", placeholder: "Hello" }
+    }
+  },
+  register(api: OpenClawPluginApi) {
+    const config = api.pluginConfig as z.infer<typeof configSchema>;
+    const defaultStyle = config?.defaultStyle ?? "casual";
+    // Use config values...
+  }
+};
+```
+
+Configure via `config.json`:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "hello": {
+        "enabled": true,
+        "config": {
+          "defaultStyle": "formal",
+          "prefix": "Greetings,"
+        }
+      }
+    }
+  }
+}
+```
+
+## Directory Structure
+
+For larger plugins, organize code into modules:
+
+```
+my-plugin/
+  package.json
+  index.ts          # Entry point
+  src/
+    tool.ts         # Tool definitions
+    config.ts       # Config schema
+    service.ts      # Background service
+  README.md
+```
+
+```typescript
+// index.ts
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { createGreetingTool } from "./src/tool.js";
+import { configSchema } from "./src/config.js";
+
+const plugin = {
+  id: "hello",
+  configSchema,
+  register(api: OpenClawPluginApi) {
+    api.registerTool(createGreetingTool(api));
+  }
+};
+
+export default plugin;
+```
+
+## Next Steps
+
+Now that you've built a basic plugin, explore advanced features:
+
+- [Plugin SDK Reference](/plugins/plugin-sdk) - Complete API documentation
+- [Hooks](/plugins/hooks) - Intercept lifecycle events
+- [Channels](/plugins/channels) - Build messaging integrations
+- [Examples](/plugins/examples) - Real-world plugin examples
+- [Publishing](/plugins/publishing) - Share your plugin on npm

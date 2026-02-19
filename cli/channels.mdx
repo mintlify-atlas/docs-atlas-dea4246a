@@ -1,0 +1,481 @@
+---
+title: "openclaw channels"
+description: "Manage connected chat channels and accounts"
+---
+
+# openclaw channels
+
+Manage messaging channel connections and authentication for OpenClaw.
+
+## Usage
+
+```bash
+openclaw channels [command] [options]
+```
+
+## Commands
+
+### list
+
+List configured channels and auth profiles.
+
+```bash
+openclaw channels list [options]
+```
+
+<ParamField path="--no-usage" type="boolean">
+  Skip model provider usage/quota snapshots
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+### status
+
+Show gateway channel status and health.
+
+```bash
+openclaw channels status [options]
+```
+
+<ParamField path="--probe" type="boolean">
+  Probe channel credentials and connectivity
+</ParamField>
+
+<ParamField path="--timeout <ms>" type="number">
+  Timeout in milliseconds (default: 10000)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+### add
+
+Add or update a channel account.
+
+```bash
+openclaw channels add [options]
+```
+
+#### General Options
+
+<ParamField path="--channel <name>" type="string" required>
+  Channel type: `telegram`, `discord`, `slack`, `signal`, `whatsapp`, `imessage`, `matrix`, etc.
+</ParamField>
+
+<ParamField path="--account <id>" type="string">
+  Account ID (default when omitted)
+</ParamField>
+
+<ParamField path="--name <name>" type="string">
+  Display name for this account
+</ParamField>
+
+#### Telegram/Discord
+
+<ParamField path="--token <token>" type="string">
+  Bot token for Telegram or Discord
+</ParamField>
+
+<ParamField path="--token-file <path>" type="string">
+  Path to file containing bot token
+</ParamField>
+
+#### Slack
+
+<ParamField path="--bot-token <token>" type="string">
+  Slack bot token (xoxb-...)
+</ParamField>
+
+<ParamField path="--app-token <token>" type="string">
+  Slack app token (xapp-...)
+</ParamField>
+
+#### Signal
+
+<ParamField path="--signal-number <e164>" type="string">
+  Signal account number in E.164 format (+12345678900)
+</ParamField>
+
+<ParamField path="--cli-path <path>" type="string">
+  Path to signal-cli executable
+</ParamField>
+
+<ParamField path="--http-url <url>" type="string">
+  Signal HTTP daemon base URL
+</ParamField>
+
+<ParamField path="--http-host <host>" type="string">
+  Signal HTTP daemon host
+</ParamField>
+
+<ParamField path="--http-port <port>" type="number">
+  Signal HTTP daemon port
+</ParamField>
+
+#### WhatsApp
+
+<ParamField path="--auth-dir <path>" type="string">
+  WhatsApp auth directory override
+</ParamField>
+
+#### iMessage
+
+<ParamField path="--cli-path <path>" type="string">
+  Path to imsg CLI executable
+</ParamField>
+
+<ParamField path="--db-path <path>" type="string">
+  iMessage database path
+</ParamField>
+
+<ParamField path="--service <service>" type="string">
+  iMessage service: `imessage`, `sms`, or `auto`
+</ParamField>
+
+<ParamField path="--region <region>" type="string">
+  iMessage region for SMS
+</ParamField>
+
+#### Matrix
+
+<ParamField path="--homeserver <url>" type="string">
+  Matrix homeserver URL
+</ParamField>
+
+<ParamField path="--user-id <id>" type="string">
+  Matrix user ID
+</ParamField>
+
+<ParamField path="--access-token <token>" type="string">
+  Matrix access token
+</ParamField>
+
+<ParamField path="--password <password>" type="string">
+  Matrix password
+</ParamField>
+
+<ParamField path="--device-name <name>" type="string">
+  Matrix device name
+</ParamField>
+
+<ParamField path="--initial-sync-limit <n>" type="number">
+  Matrix initial sync limit
+</ParamField>
+
+#### Tlon (Urbit)
+
+<ParamField path="--ship <ship>" type="string">
+  Tlon ship name (~sampel-palnet)
+</ParamField>
+
+<ParamField path="--url <url>" type="string">
+  Tlon ship URL
+</ParamField>
+
+<ParamField path="--code <code>" type="string">
+  Tlon login code
+</ParamField>
+
+<ParamField path="--group-channels <list>" type="string">
+  Comma-separated list of group channels
+</ParamField>
+
+<ParamField path="--dm-allowlist <list>" type="string">
+  Comma-separated list of allowed ships for DMs
+</ParamField>
+
+<ParamField path="--auto-discover-channels" type="boolean">
+  Auto-discover group channels
+</ParamField>
+
+#### Environment
+
+<ParamField path="--use-env" type="boolean">
+  Use token from environment variable (default account only)
+</ParamField>
+
+### remove
+
+Disable or delete a channel account.
+
+```bash
+openclaw channels remove [options]
+```
+
+<ParamField path="--channel <name>" type="string" required>
+  Channel name
+</ParamField>
+
+<ParamField path="--account <id>" type="string">
+  Account ID (default when omitted)
+</ParamField>
+
+<ParamField path="--delete" type="boolean">
+  Delete config entries without prompting
+</ParamField>
+
+### login
+
+Link a channel account (for channels that support interactive authentication).
+
+```bash
+openclaw channels login [options]
+```
+
+<ParamField path="--channel <channel>" type="string">
+  Channel name (default: whatsapp)
+</ParamField>
+
+<ParamField path="--account <id>" type="string">
+  Account ID
+</ParamField>
+
+<ParamField path="--verbose" type="boolean">
+  Verbose connection logs
+</ParamField>
+
+### logout
+
+Log out of a channel session.
+
+```bash
+openclaw channels logout [options]
+```
+
+<ParamField path="--channel <channel>" type="string">
+  Channel name (default: whatsapp)
+</ParamField>
+
+<ParamField path="--account <id>" type="string">
+  Account ID
+</ParamField>
+
+### capabilities
+
+Show provider capabilities (intents/scopes + supported features).
+
+```bash
+openclaw channels capabilities [options]
+```
+
+<ParamField path="--channel <name>" type="string">
+  Channel name (or "all" for all channels)
+</ParamField>
+
+<ParamField path="--account <id>" type="string">
+  Account ID (only with --channel)
+</ParamField>
+
+<ParamField path="--target <dest>" type="string">
+  Channel target for permission audit (e.g., Discord channel:id)
+</ParamField>
+
+<ParamField path="--timeout <ms>" type="number">
+  Timeout in milliseconds (default: 10000)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+### resolve
+
+Resolve channel/user names to IDs.
+
+```bash
+openclaw channels resolve <entries...> [options]
+```
+
+<ParamField path="entries" type="string[]" required>
+  Names or IDs to resolve
+</ParamField>
+
+<ParamField path="--channel <name>" type="string">
+  Channel name
+</ParamField>
+
+<ParamField path="--account <id>" type="string">
+  Account ID
+</ParamField>
+
+<ParamField path="--kind <kind>" type="string">
+  Target kind: `auto`, `user`, or `group` (default: auto)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+### logs
+
+Show recent channel logs from the gateway log file.
+
+```bash
+openclaw channels logs [options]
+```
+
+<ParamField path="--channel <name>" type="string">
+  Channel name (default: all)
+</ParamField>
+
+<ParamField path="--lines <n>" type="number">
+  Number of lines to show (default: 200)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+```bash List Channels
+# List all configured channels
+openclaw channels list
+
+# List with JSON output
+openclaw channels list --json
+
+# Check channel status
+openclaw channels status --probe
+```
+
+```bash Telegram
+# Add Telegram bot
+openclaw channels add --channel telegram --token "123456:ABC-DEF"
+
+# Add with custom account ID
+openclaw channels add --channel telegram --account mybot --token "123456:ABC-DEF"
+
+# Use token from file
+openclaw channels add --channel telegram --token-file ~/telegram-token.txt
+```
+
+```bash Discord
+# Add Discord bot
+openclaw channels add --channel discord --token "MTk4..."
+
+# Add with display name
+openclaw channels add --channel discord --name "My Bot" --token "MTk4..."
+```
+
+```bash Slack
+# Add Slack bot
+openclaw channels add --channel slack --bot-token "xoxb-..." --app-token "xapp-..."
+```
+
+```bash Signal
+# Add Signal number
+openclaw channels add --channel signal --signal-number "+12345678900"
+
+# With HTTP daemon
+openclaw channels add --channel signal --signal-number "+12345678900" \
+  --http-url "http://localhost:8080"
+```
+
+```bash WhatsApp
+# Link WhatsApp (interactive)
+openclaw channels login --channel whatsapp
+
+# With custom auth directory
+openclaw channels add --channel whatsapp --auth-dir ~/.openclaw/whatsapp-auth
+
+# Logout
+openclaw channels logout --channel whatsapp
+```
+
+```bash Matrix
+# Add Matrix account with password
+openclaw channels add --channel matrix \
+  --homeserver "https://matrix.org" \
+  --user-id "@user:matrix.org" \
+  --password "mypassword"
+
+# With access token
+openclaw channels add --channel matrix \
+  --homeserver "https://matrix.org" \
+  --user-id "@user:matrix.org" \
+  --access-token "syt_..."
+```
+
+```bash Management
+# Remove a channel
+openclaw channels remove --channel telegram --account mybot
+
+# Remove with deletion
+openclaw channels remove --channel telegram --delete
+
+# View capabilities
+openclaw channels capabilities --channel discord
+
+# Resolve names to IDs
+openclaw channels resolve "username" --channel telegram
+```
+</CodeGroup>
+
+<Note>
+Some channels (like WhatsApp) require interactive login with `openclaw channels login`. Others (like Telegram and Discord) use bot tokens that can be added directly.
+</Note>
+
+<Warning>
+Never commit or share channel tokens publicly. Store them securely and use environment variables or token files for automation.
+</Warning>
+
+## Supported Channels
+
+OpenClaw supports these messaging platforms:
+
+- **Telegram** - Bot API with token authentication
+- **Discord** - Bot with token authentication
+- **Slack** - Bot with app and bot tokens
+- **Signal** - via signal-cli or HTTP daemon
+- **WhatsApp** - via WhatsApp Web (requires QR login)
+- **iMessage** - macOS only, requires database access
+- **Matrix** - Homeserver with password or token
+- **Google Chat** - via webhooks
+- **Microsoft Teams** - via extension
+- **Tlon (Urbit)** - Ship connection
+
+## Configuration
+
+Channel configurations are stored in `~/.openclaw/config.json5` under the `channels` section:
+
+```json5
+{
+  channels: {
+    telegram: {
+      accounts: {
+        default: {
+          token: "123456:ABC-DEF"
+        }
+      }
+    }
+  }
+}
+```
+
+## Environment Variables
+
+You can use environment variables for tokens:
+
+```bash
+export TELEGRAM_BOT_TOKEN=123456:ABC-DEF
+export DISCORD_BOT_TOKEN=MTk4...
+export SLACK_BOT_TOKEN=xoxb-...
+export SLACK_APP_TOKEN=xapp-...
+```
+
+Then add channels with `--use-env`:
+
+```bash
+openclaw channels add --channel telegram --use-env
+```
+
+## Related Commands
+
+- [gateway](/cli/gateway) - Manage the gateway that channels connect to
+- [status](/cli/status) - Check overall system status including channels
+- [doctor](/cli/doctor) - Diagnose channel connectivity issues

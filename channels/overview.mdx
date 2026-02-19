@@ -1,0 +1,219 @@
+---
+title: Channels Overview
+description: Connect OpenClaw to WhatsApp, Telegram, Discord, Slack, Signal, iMessage, and more
+---
+
+OpenClaw connects to multiple messaging platforms through **channels**. Each channel provides a bridge between your AI agent and a messaging platform, enabling seamless communication across different apps.
+
+## Supported Channels
+
+<CardGroup cols={2}>
+  <Card title="WhatsApp" icon="whatsapp" href="/channels/whatsapp">
+    Connect via Baileys library with QR code pairing. Full support for groups, media, and reactions.
+  </Card>
+  
+  <Card title="Telegram" icon="telegram" href="/channels/telegram">
+    Bot API integration with commands, groups, threads, and native inline buttons.
+  </Card>
+  
+  <Card title="Discord" icon="discord" href="/channels/discord">
+    Full bot support with guilds, channels, threads, reactions, and rich embeds.
+  </Card>
+  
+  <Card title="Slack" icon="slack" href="/channels/slack">
+    Socket Mode connection with channels, DMs, slash commands, and interactive blocks.
+  </Card>
+  
+  <Card title="Signal" icon="signal" href="/channels/signal">
+    Signal protocol support via signal-cli with E2E encryption and reactions.
+  </Card>
+  
+  <Card title="iMessage" icon="message" href="/channels/imessage">
+    macOS-only integration using Messages.app database and AppleScript.
+  </Card>
+</CardGroup>
+
+## Quick Comparison
+
+| Channel | Setup Difficulty | Platform | Group Support | Media | Pairing |
+|---------|-----------------|----------|---------------|-------|----------|
+| **WhatsApp** | Easy | Any | ✓ | ✓ | QR Code |
+| **Telegram** | Easy | Any | ✓ | ✓ | Bot Token |
+| **Discord** | Easy | Any | ✓ | ✓ | Bot Token |
+| **Slack** | Medium | Any | ✓ | ✓ | OAuth + Socket |
+| **Signal** | Medium | Any | ✓ | ✓ | QR Code |
+| **iMessage** | Hard | macOS only | ✓ | ✓ | System Access |
+
+## Channel Configuration
+
+All channels are configured in your `openclaw.config.json` under the `channels` section:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "123456:ABC...",
+      "dmPolicy": "pairing",
+      "allowFrom": ["123456789"]
+    },
+    "discord": {
+      "enabled": true,
+      "token": "...",
+      "groupPolicy": "allowlist",
+      "guilds": {
+        "guild-id": {
+          "channels": {
+            "channel-id": { "allow": true }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## DM Policies
+
+Most channels support configurable DM (direct message) policies:
+
+- **`pairing`** (default): Unknown senders receive a pairing code; you approve them
+- **`allowlist`**: Only pre-approved senders can message
+- **`open`**: Accept messages from anyone (requires `allowFrom: ["*"]`)
+- **`disabled`**: Ignore all direct messages
+
+Example configuration:
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "dmPolicy": "pairing",
+      "allowFrom": ["+15555550123"]
+    }
+  }
+}
+```
+
+## Group Policies
+
+Channels with group/channel support (Discord, Slack, Telegram, WhatsApp) use a `groupPolicy`:
+
+- **`allowlist`**: Only specified channels/groups are monitored
+- **`open`**: All channels the bot has access to
+- **`disabled`**: No group monitoring
+
+For Discord and Slack, configure specific channels:
+
+```json
+{
+  "channels": {
+    "discord": {
+      "groupPolicy": "allowlist",
+      "guilds": {
+        "123456789": {
+          "channels": {
+            "987654321": { "allow": true }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Getting Started
+
+The easiest way to set up channels is with the interactive onboarding:
+
+```bash
+openclaw init
+```
+
+This walks you through:
+1. Selecting which channels to enable
+2. Providing tokens/credentials
+3. Configuring DM and group policies
+4. Setting up allowlists
+
+For manual setup, see each channel's dedicated page.
+
+## Multi-Account Support
+
+Most channels support multiple accounts. Configure them under `accounts`:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "accounts": {
+        "work": {
+          "enabled": true,
+          "botToken": "work-bot-token",
+          "allowFrom": ["work-user-id"]
+        },
+        "personal": {
+          "enabled": true,
+          "botToken": "personal-bot-token",
+          "allowFrom": ["personal-user-id"]
+        }
+      }
+    }
+  }
+}
+```
+
+The default account is identified by `"default"` or inferred from top-level configuration.
+
+## Environment Variables
+
+Most channels support environment variables as an alternative to config file storage:
+
+- `TELEGRAM_BOT_TOKEN` - Telegram bot token
+- `DISCORD_BOT_TOKEN` - Discord bot token
+- `SLACK_BOT_TOKEN` - Slack bot token
+- `SLACK_APP_TOKEN` - Slack app-level token
+
+Environment variables take precedence over config file values.
+
+## Channel Status
+
+Check channel status at any time:
+
+```bash
+openclaw channels status
+```
+
+For detailed diagnostics including connection probes:
+
+```bash
+openclaw channels status --probe
+```
+
+## Security Best Practices
+
+1. **Use pairing mode** for channels you access from a personal device
+2. **Use allowlist mode** for production bots with known users
+3. **Never commit tokens** to version control - use environment variables or secure vaults
+4. **Rotate tokens regularly** if they may have been exposed
+5. **Review allowlists** periodically to remove stale entries
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="WhatsApp Setup" icon="whatsapp" href="/channels/whatsapp">
+    Set up WhatsApp with QR code pairing
+  </Card>
+  
+  <Card title="Telegram Setup" icon="telegram" href="/channels/telegram">
+    Create a Telegram bot with @BotFather
+  </Card>
+  
+  <Card title="Discord Setup" icon="discord" href="/channels/discord">
+    Configure Discord bot and permissions
+  </Card>
+  
+  <Card title="Pairing Guide" icon="qrcode" href="/channels/pairing">
+    Learn about pairing codes and device verification
+  </Card>
+</CardGroup>

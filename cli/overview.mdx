@@ -1,0 +1,146 @@
+---
+title: "CLI Overview"
+description: "OpenClaw command-line interface overview and installation"
+---
+
+# OpenClaw CLI
+
+The OpenClaw CLI is your primary interface for managing the gateway, agents, channels, and configuration.
+
+## Installation
+
+### Global Install (npm)
+
+```bash
+npm install -g openclaw@latest
+```
+
+### Source Checkout (git)
+
+```bash
+git clone https://github.com/openclaw/openclaw
+cd openclaw
+pnpm install
+pnpm build
+```
+
+## Usage
+
+```bash
+openclaw [command] [options]
+```
+
+## Global Options
+
+<ParamField path="--help" type="boolean">
+  Display help for any command
+</ParamField>
+
+<ParamField path="--version" type="boolean">
+  Display the current version
+</ParamField>
+
+<ParamField path="--no-color" type="boolean">
+  Disable ANSI colors in output
+</ParamField>
+
+<ParamField path="--profile <name>" type="string">
+  Use a custom profile for configuration
+</ParamField>
+
+## Core Commands
+
+- **[gateway](/cli/gateway)** - Run and manage the WebSocket Gateway
+- **[agent](/cli/agent)** - Run one agent turn via the Gateway
+- **[channels](/cli/channels)** - Manage connected chat channels
+- **[config](/cli/config)** - Get, set, or list configuration values
+- **[onboard](/cli/onboard)** - Interactive onboarding wizard
+
+## Management Commands
+
+- **[daemon](/cli/daemon)** - Manage the Gateway service (launchd/systemd/schtasks)
+- **[logs](/cli/logs)** - Tail gateway file logs via RPC
+- **[update](/cli/update)** - Update OpenClaw and inspect update channel status
+- **[doctor](/cli/doctor)** - Health checks and quick fixes
+
+## Getting Help
+
+Use `--help` with any command to see detailed usage information:
+
+```bash
+openclaw --help
+openclaw gateway --help
+openclaw agent --help
+```
+
+## Examples
+
+<CodeGroup>
+```bash Start Gateway
+# Run gateway in foreground
+openclaw gateway run
+
+# Run with custom port
+openclaw gateway run --port 18790
+```
+
+```bash Check Status
+# Check gateway and channel status
+openclaw status
+
+# Deep probe with channel checks
+openclaw status --deep
+```
+
+```bash Send Message
+# Send a message to an agent
+openclaw agent --message "Hello" --to +1234567890
+
+# Send with different thinking level
+openclaw agent --message "Complex task" --thinking high
+```
+</CodeGroup>
+
+<Note>
+The CLI requires Node.js 22 or higher. Use `node --version` to check your version.
+</Note>
+
+## Configuration
+
+The CLI reads configuration from `~/.openclaw/config.json5` by default. Use `openclaw config` to manage settings:
+
+```bash
+# View a configuration value
+openclaw config get gateway.port
+
+# Set a configuration value
+openclaw config set gateway.port 18790
+
+# Launch interactive config wizard
+openclaw configure
+```
+
+## Environment Variables
+
+<ParamField path="OPENCLAW_GATEWAY_TOKEN" type="string">
+  Override gateway authentication token
+</ParamField>
+
+<ParamField path="OPENCLAW_GATEWAY_PASSWORD" type="string">
+  Override gateway authentication password
+</ParamField>
+
+<ParamField path="NO_COLOR" type="string">
+  Disable ANSI colors (set to any value)
+</ParamField>
+
+<ParamField path="OPENCLAW_PROFILE" type="string">
+  Use a custom profile for configuration
+</ParamField>
+
+## Next Steps
+
+1. Run the onboarding wizard: `openclaw onboard`
+2. Start the gateway: `openclaw gateway run`
+3. Connect channels: `openclaw channels add`
+4. Check health: `openclaw doctor`

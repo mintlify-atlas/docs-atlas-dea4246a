@@ -1,0 +1,419 @@
+---
+title: "openclaw daemon"
+description: "Manage the Gateway service (launchd/systemd/schtasks)"
+---
+
+# openclaw daemon
+
+Manage the OpenClaw Gateway as a system background service.
+
+## Usage
+
+```bash
+openclaw daemon [command] [options]
+```
+
+## Commands
+
+### install
+
+Install the gateway as a system service.
+
+```bash
+openclaw daemon install [options]
+```
+
+Installs the appropriate service for your platform:
+- **macOS**: LaunchAgent (`~/Library/LaunchAgents/ai.openclaw.gateway.plist`)
+- **Linux**: systemd user service (`~/.config/systemd/user/openclaw-gateway.service`)
+- **Windows**: Task Scheduler task
+
+<ParamField path="--force" type="boolean">
+  Overwrite existing service configuration
+</ParamField>
+
+### start
+
+Start the gateway service.
+
+```bash
+openclaw daemon start
+```
+
+Starts the installed service using the platform's service manager:
+- **macOS**: `launchctl load`
+- **Linux**: `systemctl --user start`
+- **Windows**: `schtasks /run`
+
+### stop
+
+Stop the gateway service.
+
+```bash
+openclaw daemon stop
+```
+
+Stops the running service:
+- **macOS**: `launchctl unload`
+- **Linux**: `systemctl --user stop`
+- **Windows**: `schtasks /end`
+
+### restart
+
+Restart the gateway service.
+
+```bash
+openclaw daemon restart
+```
+
+Equivalent to running `stop` followed by `start`.
+
+### status
+
+Show service install status and probe the Gateway.
+
+```bash
+openclaw daemon status [options]
+```
+
+<ParamField path="--json" type="boolean">
+  Output JSON format
+</ParamField>
+
+### uninstall
+
+Remove the gateway service.
+
+```bash
+openclaw daemon uninstall
+```
+
+Removes the service configuration:
+- **macOS**: Removes LaunchAgent plist
+- **Linux**: Removes systemd service unit
+- **Windows**: Removes Task Scheduler task
+
+<Warning>
+Uninstalling stops the service and removes the service configuration, but does not delete the OpenClaw installation or configuration.
+</Warning>
+
+## Examples
+
+<CodeGroup>
+```bash Install and Start
+# Install the gateway service
+openclaw daemon install
+
+# Start the service
+openclaw daemon start
+
+# Check status
+openclaw daemon status
+```
+
+```bash Manage Service
+# Restart service
+openclaw daemon restart
+
+# Stop service
+openclaw daemon stop
+
+# Check if running
+openclaw daemon status
+```
+
+```bash Reinstall
+# Reinstall service (overwrites existing)
+openclaw daemon install --force
+
+# Or uninstall then install
+openclaw daemon uninstall
+openclaw daemon install
+```
+
+```bash Status Check
+# Check status with details
+openclaw daemon status
+
+# JSON output for scripting
+openclaw daemon status --json
+```
+</CodeGroup>
+
+## Platform Details
+
+### macOS (LaunchAgent)
+
+The service is installed as a LaunchAgent at:
+```
+~/Library/LaunchAgents/ai.openclaw.gateway.plist
+```
+
+#### Service Configuration
+
+The plist includes:
+- Automatic startup on login
+- Standard output/error logging
+- Restart on crash
+- Environment variables
+
+#### Manual Management
+
+```bash
+# Load service
+launchctl load ~/Library/LaunchAgents/ai.openclaw.gateway.plist
+
+# Unload service
+launchctl unload ~/Library/LaunchAgents/ai.openclaw.gateway.plist
+
+# View logs
+log show --predicate 'subsystem == "ai.openclaw"' --last 1h
+```
+
+### Linux (systemd)
+
+The service is installed as a user service at:
+```
+~/.config/systemd/user/openclaw-gateway.service
+```
+
+#### Service Configuration
+
+The unit file includes:
+- User service (no root required)
+- Restart on failure
+- Standard output to journal
+- Environment variables
+
+#### User Lingering
+
+For the service to run when not logged in, enable lingering:
+
+```bash
+sudo loginctl enable-linger $USER
+```
+
+<Note>
+Without lingering enabled, systemd stops user services on logout. The `doctor` command will detect this and offer to enable lingering.
+</Note>
+
+#### Manual Management
+
+```bash
+# Reload systemd after changes
+systemctl --user daemon-reload
+
+# Start service
+systemctl --user start openclaw-gateway
+
+# Stop service
+systemctl --user stop openclaw-gateway
+
+# Enable auto-start
+systemctl --user enable openclaw-gateway
+
+# View logs
+journalctl --user -u openclaw-gateway -f
+```
+
+### Windows (Task Scheduler)
+
+The service is installed as a scheduled task.
+
+#### Service Configuration
+
+- Runs on user login
+- Background execution
+- Restart on failure
+
+#### Manual Management
+
+```powershell
+# Start task
+schtasks /run /tn "OpenClaw Gateway"
+
+# Stop task
+schtasks /end /tn "OpenClaw Gateway"
+
+# Query status
+schtasks /query /tn "OpenClaw Gateway"
+```
+
+<Tip>
+For Windows, WSL2 is recommended for better compatibility. Install OpenClaw in WSL2 and use systemd for service management.
+</Tip>
+
+## Environment Variables
+
+The daemon service inherits environment variables from:
+
+1. **Service configuration** (set during install)
+2. **User environment** (shell profile)
+3. **Config file** (`~/.openclaw/config.json5`)
+
+Common environment variables:
+
+<ParamField path="OPENCLAW_GATEWAY_TOKEN" type="string">
+  Gateway authentication token
+</ParamField>
+
+<ParamField path="OPENCLAW_GATEWAY_PASSWORD" type="string">
+  Gateway authentication password
+</ParamField>
+
+<ParamField path="NODE_ENV" type="string">
+  Node environment (production, development)
+</ParamField>
+
+<ParamField path="OPENCLAW_PROFILE" type="string">
+  Configuration profile name
+</ParamField>
+
+## Logging
+
+Service logs are managed by the platform's logging system:
+
+### macOS Unified Logs
+
+```bash
+# View recent logs
+log show --predicate 'subsystem == "ai.openclaw"' --last 1h
+
+# Follow logs
+log stream --predicate 'subsystem == "ai.openclaw"'
+
+# Or use the clawlog helper
+./scripts/clawlog.sh
+```
+
+### Linux systemd Journal
+
+```bash
+# View logs
+journalctl --user -u openclaw-gateway
+
+# Follow logs
+journalctl --user -u openclaw-gateway -f
+
+# View last 100 lines
+journalctl --user -u openclaw-gateway -n 100
+```
+
+### Via OpenClaw CLI
+
+Use the `logs` command to view gateway logs:
+
+```bash
+# Tail logs
+openclaw logs
+
+# Follow logs
+openclaw logs --follow
+
+# Last 500 lines
+openclaw logs --limit 500
+```
+
+## Troubleshooting
+
+### Service Won't Start
+
+1. **Check installation**:
+   ```bash
+   openclaw daemon status
+   ```
+
+2. **Check gateway config**:
+   ```bash
+   openclaw config get gateway
+   ```
+
+3. **Run diagnostics**:
+   ```bash
+   openclaw doctor
+   ```
+
+4. **Try manual start**:
+   ```bash
+   openclaw gateway run --verbose
+   ```
+
+### Service Crashes Immediately
+
+1. **Check logs**:
+   ```bash
+   openclaw logs --limit 200
+   ```
+
+2. **Check port availability**:
+   ```bash
+   lsof -i :18789
+   ```
+
+3. **Check authentication**:
+   ```bash
+   openclaw config get gateway.auth
+   ```
+
+### Service Stops on Logout (Linux)
+
+Enable user lingering:
+
+```bash
+sudo loginctl enable-linger $USER
+```
+
+Verify:
+
+```bash
+loginctl show-user $USER | grep Linger
+```
+
+Should show `Linger=yes`.
+
+### Permission Errors
+
+Ensure the service runs as your user (not root):
+
+```bash
+# macOS
+launchctl list | grep openclaw
+
+# Linux
+systemctl --user status openclaw-gateway
+```
+
+## Automatic Startup
+
+By default, the daemon starts automatically:
+
+- **macOS**: On user login (LaunchAgent)
+- **Linux**: When systemd user session starts (requires lingering)
+- **Windows**: On user login (Task Scheduler)
+
+To disable automatic startup:
+
+### macOS
+
+```bash
+launchctl unload -w ~/Library/LaunchAgents/ai.openclaw.gateway.plist
+```
+
+### Linux
+
+```bash
+systemctl --user disable openclaw-gateway
+```
+
+### Windows
+
+```powershell
+schtasks /change /tn "OpenClaw Gateway" /disable
+```
+
+## Related Commands
+
+- [gateway](/cli/gateway) - Run gateway directly (foreground)
+- [logs](/cli/logs) - View gateway logs
+- [status](/cli/status) - Check overall system status
+- [doctor](/cli/doctor) - Diagnose service issues

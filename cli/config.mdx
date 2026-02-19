@@ -1,0 +1,298 @@
+---
+title: "openclaw config"
+description: "Get, set, and manage OpenClaw configuration"
+---
+
+# openclaw config
+
+Manage OpenClaw configuration values programmatically.
+
+## Usage
+
+```bash
+openclaw config [command] [options]
+```
+
+Run without a subcommand to launch the interactive setup wizard:
+
+```bash
+openclaw config
+```
+
+## Commands
+
+### get
+
+Get a configuration value by dot path.
+
+```bash
+openclaw config get <path> [options]
+```
+
+<ParamField path="path" type="string" required>
+  Configuration path using dot notation (e.g., `gateway.port`)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output in JSON format
+</ParamField>
+
+### set
+
+Set a configuration value by dot path.
+
+```bash
+openclaw config set <path> <value> [options]
+```
+
+<ParamField path="path" type="string" required>
+  Configuration path using dot notation
+</ParamField>
+
+<ParamField path="value" type="string" required>
+  Value to set (JSON5 or raw string)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Parse value as JSON5 (required for objects/arrays)
+</ParamField>
+
+### unset
+
+Remove a configuration value by dot path.
+
+```bash
+openclaw config unset <path>
+```
+
+<ParamField path="path" type="string" required>
+  Configuration path using dot notation
+</ParamField>
+
+## Path Notation
+
+Configuration paths use dot notation with support for:
+
+- **Nested objects**: `gateway.auth.token`
+- **Arrays**: `channels.telegram.accounts[0].token`
+- **Bracket notation**: `gateway["auth"]["token"]`
+- **Escaped dots**: `path.with\.dot.in\.key`
+
+## Examples
+
+<CodeGroup>
+```bash Get Values
+# Get gateway port
+openclaw config get gateway.port
+
+# Get with JSON output
+openclaw config get gateway.auth --json
+
+# Get nested value
+openclaw config get agents.defaults.model.primary
+
+# Get array element
+openclaw config get channels.telegram.accounts[0].token
+```
+
+```bash Set Values
+# Set simple value
+openclaw config set gateway.port 18790
+
+# Set string value
+openclaw config set gateway.mode local
+
+# Set object (requires --json)
+openclaw config set gateway.auth '{"mode":"token","token":"secret"}' --json
+
+# Set array (requires --json)
+openclaw config set agents.defaults.models '["gpt-4","claude-3"]' --json
+
+# Set nested value
+openclaw config set agents.defaults.model.primary "anthropic:claude-4.5-sonnet"
+```
+
+```bash Unset Values
+# Remove a value
+openclaw config unset gateway.auth.password
+
+# Remove nested value
+openclaw config unset channels.telegram.accounts[0]
+
+# Remove entire section
+openclaw config unset channels.discord
+```
+
+```bash Wizard
+# Launch interactive wizard
+openclaw config
+
+# Configure specific sections
+openclaw config --section gateway --section channels
+```
+</CodeGroup>
+
+<Note>
+After modifying configuration, restart the gateway for changes to take effect: `openclaw gateway restart`
+</Note>
+
+## Common Configuration Paths
+
+### Gateway
+
+- `gateway.mode` - Gateway mode (local or remote)
+- `gateway.port` - WebSocket port (default: 18789)
+- `gateway.bind` - Bind mode (loopback, lan, tailnet, auto, custom)
+- `gateway.auth.mode` - Auth mode (token, password, none)
+- `gateway.auth.token` - Auth token
+- `gateway.auth.password` - Auth password
+
+### Agents
+
+- `agents.defaults.workspace` - Default workspace directory
+- `agents.defaults.model.primary` - Primary model (e.g., anthropic:claude-4.5-sonnet)
+- `agents.defaults.thinkingDefault` - Default thinking level
+- `agents.defaults.contextTokens` - Max context tokens
+
+### Channels
+
+- `channels.telegram.accounts.default.token` - Telegram bot token
+- `channels.discord.accounts.default.token` - Discord bot token
+- `channels.slack.accounts.default.botToken` - Slack bot token
+- `channels.slack.accounts.default.appToken` - Slack app token
+
+### Discovery
+
+- `discovery.wideArea.domain` - Wide-area discovery domain
+
+## JSON5 Syntax
+
+When setting complex values, use JSON5 syntax with `--json`:
+
+```bash
+# Object with comments
+openclaw config set gateway.auth '{
+  mode: "token",  // Use token auth
+  token: "secret"
+}' --json
+
+# Array
+openclaw config set agents.defaults.models '["gpt-4", "claude-3"]' --json
+
+# Nested structure
+openclaw config set channels.telegram '{
+  accounts: {
+    default: {
+      token: "123456:ABC-DEF",
+      enabled: true
+    }
+  }
+}' --json
+```
+
+## Configuration File
+
+The configuration file is located at `~/.openclaw/config.json5` and supports:
+
+- **JSON5 syntax** - Comments, trailing commas, unquoted keys
+- **Environment variables** - `${ENV_VAR}` substitution
+- **Includes** - `$include: "path/to/other.json5"`
+
+### Example Configuration
+
+```json5
+{
+  // Gateway configuration
+  gateway: {
+    mode: "local",
+    port: 18789,
+    bind: "loopback",
+    auth: {
+      mode: "token",
+      token: "${OPENCLAW_GATEWAY_TOKEN}"
+    }
+  },
+  
+  // Agent defaults
+  agents: {
+    defaults: {
+      workspace: "~/openclaw-workspace",
+      model: {
+        primary: "anthropic:claude-4.5-sonnet"
+      },
+      thinkingDefault: "medium",
+      contextTokens: 200000
+    }
+  },
+  
+  // Channel configurations
+  channels: {
+    telegram: {
+      accounts: {
+        default: {
+          token: "${TELEGRAM_BOT_TOKEN}"
+        }
+      }
+    }
+  }
+}
+```
+
+## Environment Variable Substitution
+
+Use `${VAR_NAME}` in config values to reference environment variables:
+
+```json5
+{
+  gateway: {
+    auth: {
+      token: "${OPENCLAW_GATEWAY_TOKEN}"
+    }
+  },
+  channels: {
+    telegram: {
+      accounts: {
+        default: {
+          token: "${TELEGRAM_BOT_TOKEN}"
+        }
+      }
+    }
+  }
+}
+```
+
+## Configuration Validation
+
+The CLI validates configuration on load. Check for errors with:
+
+```bash
+openclaw doctor
+```
+
+Common validation issues:
+
+- Invalid JSON5 syntax
+- Missing required fields
+- Invalid enum values
+- Type mismatches
+
+## Backup and Migration
+
+The CLI creates automatic backups when writing config:
+
+```bash
+# Backups are stored as
+~/.openclaw/config.json5.bak
+```
+
+To manually backup:
+
+```bash
+cp ~/.openclaw/config.json5 ~/.openclaw/config.json5.backup
+```
+
+## Related Commands
+
+- [configure](/cli/configure) - Interactive configuration wizard
+- [setup](/cli/setup) - Initialize local config and workspace
+- [doctor](/cli/doctor) - Validate and repair configuration

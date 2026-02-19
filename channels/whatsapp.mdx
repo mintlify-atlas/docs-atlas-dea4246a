@@ -1,0 +1,315 @@
+---
+title: WhatsApp Channel
+description: Connect OpenClaw to WhatsApp using the Baileys library with QR code pairing
+---
+
+OpenClaw connects to WhatsApp using the [Baileys](https://github.com/WhiskeySockets/Baileys) library, which provides a full-featured WhatsApp Web client. This enables direct messaging, group chats, media sharing, and reactions without requiring an official Business API account.
+
+## Quick Start
+
+The fastest way to set up WhatsApp is with the interactive onboarding:
+
+```bash
+openclaw init
+```
+
+Select WhatsApp and follow the QR code pairing flow.
+
+## Manual Setup
+
+<Steps>
+  <Step title="Enable WhatsApp in config">
+    Add WhatsApp configuration to `openclaw.config.json`:
+
+    ```json
+    {
+      "channels": {
+        "whatsapp": {
+          "enabled": true,
+          "dmPolicy": "pairing",
+          "allowFrom": []
+        }
+      },
+      "web": {
+        "enabled": true
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Pair your device">
+    Start the pairing process:
+
+    ```bash
+    openclaw channels login whatsapp
+    ```
+
+    A QR code will appear in your terminal. Scan it with WhatsApp on your phone:
+    - Open WhatsApp → Settings → Linked Devices
+    - Tap "Link a Device"
+    - Scan the QR code
+  </Step>
+
+  <Step title="Verify connection">
+    Check that WhatsApp is connected:
+
+    ```bash
+    openclaw channels status --probe
+    ```
+
+    You should see WhatsApp listed as connected.
+  </Step>
+
+  <Step title="Configure access policy">
+    Set your DM policy and allowlist (see [Configuration](#configuration) below).
+  </Step>
+</Steps>
+
+## Configuration
+
+### Basic Options
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "allowFrom": ["+15555550123"],
+      "selfChatMode": false
+    }
+  },
+  "web": {
+    "enabled": true,
+    "authDir": "~/.openclaw/auth/whatsapp"
+  }
+}
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | boolean | `false` | Enable WhatsApp channel |
+| `dmPolicy` | string | `"pairing"` | DM access policy: `pairing`, `allowlist`, `open`, `disabled` |
+| `allowFrom` | string[] | `[]` | E.164 phone numbers allowed to message (e.g., `["+15555550123"]`) |
+| `selfChatMode` | boolean | `false` | Allow messages from your own number (personal phone mode) |
+
+### DM Policies
+
+- **`pairing`** (recommended): Unknown senders get a pairing code; you approve them with `openclaw pairing approve`
+- **`allowlist`**: Only numbers in `allowFrom` can message; others are blocked
+- **`open`**: Anyone can message (set `allowFrom: ["*"]`)
+- **`disabled`**: Ignore all WhatsApp DMs
+
+### Self-Chat Mode
+
+If you're using your personal WhatsApp number with OpenClaw, enable `selfChatMode` to allow messages from yourself:
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "selfChatMode": true,
+      "dmPolicy": "allowlist",
+      "allowFrom": ["+15555550123"]
+    }
+  }
+}
+```
+
+### Group Configuration
+
+WhatsApp groups work automatically once you're paired. The bot responds when:
+- You send a message in a group where the bot is a member
+- The message is a reply to one of the bot's messages
+- The message mentions the bot (if mention gating is enabled)
+
+To configure group-specific behavior:
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "groups": {
+        "123456789@g.us": {
+          "requireMention": true,
+          "allowFrom": ["+15555550123"],
+          "toolPolicy": "allowlist"
+        }
+      }
+    }
+  }
+}
+```
+
+## Multi-Account Support
+
+You can connect multiple WhatsApp numbers:
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "accounts": {
+        "personal": {
+          "enabled": true,
+          "allowFrom": ["+15555550123"]
+        },
+        "work": {
+          "enabled": true,
+          "allowFrom": ["+15555550456"]
+        }
+      }
+    }
+  },
+  "web": {
+    "authDirs": {
+      "personal": "~/.openclaw/auth/whatsapp-personal",
+      "work": "~/.openclaw/auth/whatsapp-work"
+    }
+  }
+}
+```
+
+Pair each account separately:
+
+```bash
+openclaw channels login whatsapp --account personal
+openclaw channels login whatsapp --account work
+```
+
+## Media Handling
+
+WhatsApp supports sending and receiving:
+- Images (JPEG, PNG, WebP)
+- Videos (MP4)
+- Audio (MP3, OGG, AAC)
+- Documents (PDF, DOCX, etc.)
+- Voice messages
+- Stickers
+
+Media is automatically downloaded and processed by OpenClaw's media pipeline.
+
+## Reactions
+
+WhatsApp supports emoji reactions. OpenClaw can send reactions in response to messages:
+
+```json
+{
+  "channels": {
+    "whatsapp": {
+      "reactions": {
+        "enabled": true,
+        "onPairingRequest": "👋",
+        "onError": "⚠️"
+      }
+    }
+  }
+}
+```
+
+## Environment Variables
+
+No environment variables are required for WhatsApp. Credentials are stored in the `authDir` (default: `~/.openclaw/auth/whatsapp/`).
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="QR code doesn't appear">
+    Ensure the `web` section is enabled in your config:
+
+    ```json
+    {
+      "web": {
+        "enabled": true
+      }
+    }
+    ```
+
+    If still not working, check logs:
+
+    ```bash
+    openclaw logs --follow
+    ```
+  </Accordion>
+
+  <Accordion title="QR code expired before scanning">
+    The QR code expires after 60 seconds. Run `openclaw channels login whatsapp` again to generate a new one.
+  </Accordion>
+
+  <Accordion title="Connection keeps dropping">
+    WhatsApp may disconnect if:
+    - The primary phone loses internet
+    - WhatsApp is uninstalled from the phone
+    - Linked device limit is reached (WhatsApp allows 4 linked devices)
+
+    Re-pair with `openclaw channels login whatsapp`.
+  </Accordion>
+
+  <Accordion title="Messages not being received">
+    Check your `dmPolicy` and `allowFrom` configuration. If using `allowlist`, ensure the sender's number is included:
+
+    ```json
+    {
+      "channels": {
+        "whatsapp": {
+          "allowFrom": ["+15555550123"]
+        }
+      }
+    }
+    ```
+
+    Verify status:
+
+    ```bash
+    openclaw channels status --probe
+    ```
+  </Accordion>
+
+  <Accordion title="Groups not working">
+    Ensure the bot is a member of the group. You must manually add the bot's phone number to the group from WhatsApp.
+
+    Check group configuration:
+
+    ```bash
+    openclaw channels resolve whatsapp <group-id>
+    ```
+  </Accordion>
+
+  <Accordion title="Credentials lost after restart">
+    Credentials are stored in `~/.openclaw/auth/whatsapp/creds.json`. Ensure this file is not being deleted and has proper permissions.
+
+    Backup your credentials:
+
+    ```bash
+    cp -r ~/.openclaw/auth/whatsapp ~/.openclaw/auth/whatsapp.backup
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Security Considerations
+
+- **Pairing credentials** are stored locally in `~/.openclaw/auth/whatsapp/`
+- **Backup credentials** regularly if you don't want to re-pair
+- **Use allowlist mode** if you only want specific contacts to access your bot
+- **Enable selfChatMode only** if you're using your personal phone number
+- **Group access** is controlled per-group via the `groups` configuration
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Pairing Guide" icon="qrcode" href="/channels/pairing">
+    Learn more about pairing codes and approvals
+  </Card>
+  
+  <Card title="Configuration Reference" icon="gear" href="/configuration">
+    Full configuration options
+  </Card>
+  
+  <Card title="Telegram Setup" icon="telegram" href="/channels/telegram">
+    Set up Telegram as another channel
+  </Card>
+  
+  <Card title="Multi-Channel" icon="network-wired" href="/channels/overview">
+    Using multiple channels together
+  </Card>
+</CardGroup>

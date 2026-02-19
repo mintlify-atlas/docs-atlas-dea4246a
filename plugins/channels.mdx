@@ -1,0 +1,524 @@
+---
+title: "Channels"
+description: "Build custom channel plugins for messaging platforms"
+---
+
+Channel plugins integrate messaging platforms with OpenClaw. A channel plugin implements adapters for message handling, authentication, status checks, and more.
+
+## Channel Structure
+
+A channel plugin implements the `ChannelPlugin` interface:
+
+```typescript
+import type { ChannelPlugin } from "openclaw/plugin-sdk";
+
+const myChannelPlugin: ChannelPlugin = {
+  id: "my-channel",
+  meta: {
+    id: "my-channel",
+    label: "My Channel",
+    selectionLabel: "My Channel (plugin)",
+    docsPath: "/channels/my-channel",
+    docsLabel: "my-channel",
+    blurb: "Custom messaging platform",
+    order: 100
+  },
+  capabilities: {
+    supportsDm: true,
+    supportsGroup: true,
+    supportsPolling: false
+  },
+  config: {
+    /* Config adapter */
+  },
+  gateway: {
+    /* Gateway adapter */
+  },
+  outbound: {
+    /* Outbound adapter */
+  },
+  status: {
+    /* Status adapter */
+  }
+};
+```
+
+## Registering Channels
+
+Register channels via the Plugin API:
+
+```typescript
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+
+const plugin = {
+  id: "my-channel",
+  name: "My Channel",
+  description: "Custom channel plugin",
+  configSchema: emptyPluginConfigSchema(),
+  register(api: OpenClawPluginApi) {
+    api.registerChannel({ plugin: myChannelPlugin });
+  }
+};
+
+export default plugin;
+```
+
+## Core Adapters
+
+### Config Adapter
+
+The config adapter manages channel configuration and accounts:
+
+```typescript
+config: {
+  resolveAccount: (config, accountId) => {
+    // Return resolved account or null
+    const section = config.channels?.myChannel;
+    if (!section?.enabled) return null;
+    
+    return {
+      accountId: accountId ?? "default",
+      config,
+      apiKey: section.apiKey,
+      serverUrl: section.serverUrl
+    };
+  },
+  
+  listAccounts: (config) => {
+    // Return list of account IDs
+    const section = config.channels?.myChannel;
+    return section?.enabled ? ["default"] : [];
+  }
+}
+```
+
+### Gateway Adapter
+
+The gateway adapter handles incoming messages:
+
+```typescript
+gateway: {
+  start: async ({ account, logger }) => {
+    // Connect to messaging platform
+    const client = new MyChannelClient(account.apiKey);
+    
+    client.on("message", async (message) => {
+      // Process incoming message
+      logger.info(`Received message: ${message.text}`);
+      
+      // Dispatch to agent
+      await handleInboundMessage({
+        channelId: "my-channel",
+        from: message.senderId,
+        to: message.recipientId,
+        text: message.text,
+        accountId: account.accountId
+      });
+    });
+    
+    await client.connect();
+    
+    return client;
+  },
+  
+  stop: async (client) => {
+    await client.disconnect();
+  }
+}
+```
+
+### Outbound Adapter
+
+The outbound adapter sends messages:
+
+```typescript
+outbound: {
+  send: async ({ account, to, payload }) => {
+    const client = new MyChannelClient(account.apiKey);
+    
+    if (payload.kind === "text") {
+      await client.sendMessage(to, payload.text);
+      return { ok: true };
+    }
+    
+    return { ok: false, error: "Unsupported payload kind" };
+  }
+}
+```
+
+### Status Adapter
+
+The status adapter provides connection status:
+
+```typescript
+status: {
+  describe: async ({ account }) => {
+    const client = new MyChannelClient(account.apiKey);
+    const isConnected = await client.ping();
+    
+    return {
+      summary: isConnected ? "connected" : "disconnected",
+      issues: isConnected ? [] : [
+        { severity: "error", message: "Not connected" }
+      ]
+    };
+  }
+}
+```
+
+## Advanced Adapters
+
+### Authentication Adapter
+
+Handle login flows:
+
+```typescript
+auth: {
+  loginWithQr: {
+    start: async ({ account }) => {
+      // Generate QR code URL
+      const { qrUrl, sessionId } = await generateQr();
+      return { qrUrl, sessionId };
+    },
+    wait: async ({ sessionId }) => {
+      // Poll for authentication
+      const auth = await pollAuth(sessionId);
+      return {
+        ok: auth.success,
+        creds: auth.credentials
+      };
+    }
+  }
+}
+```
+
+### Pairing Adapter
+
+Manage device pairing:
+
+```typescript
+pairing: {
+  idLabel: "userId",
+  normalizeAllowEntry: (entry) => entry.toLowerCase(),
+  
+  list: async ({ account }) => {
+    // Return pending pairing requests
+    const requests = await fetchPairingRequests(account);
+    return requests.map(r => ({
+      id: r.id,
+      sender: r.userId,
+      timestamp: r.timestamp
+    }));
+  },
+  
+  approve: async ({ account, id }) => {
+    await approvePairing(account, id);
+    return { ok: true };
+  },
+  
+  reject: async ({ account, id }) => {
+    await rejectPairing(account, id);
+    return { ok: true };
+  }
+}
+```
+
+### Groups Adapter
+
+Manage group chats:
+
+```typescript
+groups: {
+  leave: async ({ account, groupId }) => {
+    await leaveGroup(account, groupId);
+    return { ok: true };
+  },
+  
+  listMembers: async ({ account, groupId }) => {
+    const members = await fetchGroupMembers(account, groupId);
+    return members.map(m => m.userId);
+  }
+}
+```
+
+### Mentions Adapter
+
+Handle @mentions in groups:
+
+```typescript
+mentions: {
+  buildMentionText: ({ botName, mentionMode }) => {
+    if (mentionMode === "at") return `@${botName}`;
+    return botName;
+  },
+  
+  normalizeText: (text) => {
+    // Strip mention markers
+    return text.replace(/@[\w]+/g, "").trim();
+  }
+}
+```
+
+### Directory Adapter
+
+List users and groups:
+
+```typescript
+directory: {
+  listPeers: async ({ account }) => {
+    const users = await fetchUsers(account);
+    return users.map(u => ({
+      kind: "peer" as const,
+      id: u.id,
+      name: u.displayName
+    }));
+  },
+  
+  listGroups: async ({ account }) => {
+    const groups = await fetchGroups(account);
+    return groups.map(g => ({
+      kind: "group" as const,
+      id: g.id,
+      name: g.name
+    }));
+  }
+}
+```
+
+## Example: Matrix Channel Plugin
+
+The Matrix channel plugin demonstrates a complete implementation:
+
+```typescript
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
+import { matrixPlugin } from "./src/channel.js";
+import { setMatrixRuntime } from "./src/runtime.js";
+
+const plugin = {
+  id: "matrix",
+  name: "Matrix",
+  description: "Matrix channel plugin (matrix-js-sdk)",
+  configSchema: emptyPluginConfigSchema(),
+  register(api: OpenClawPluginApi) {
+    setMatrixRuntime(api.runtime);
+    api.registerChannel({ plugin: matrixPlugin });
+  }
+};
+
+export default plugin;
+```
+
+See the [full source](https://github.com/openclaw/openclaw/tree/main/extensions/matrix) for details.
+
+## Message Handling
+
+Channel plugins handle inbound messages by dispatching to the routing system:
+
+```typescript
+import { recordInboundSession } from "openclaw/plugin-sdk";
+
+gateway: {
+  start: async ({ account, config, logger }) => {
+    client.on("message", async (msg) => {
+      // Record session
+      const sessionKey = recordInboundSession({
+        config,
+        channelId: "my-channel",
+        accountId: account.accountId,
+        from: msg.senderId,
+        to: msg.recipientId
+      });
+      
+      // Dispatch to agent
+      await dispatchToAgent({
+        sessionKey,
+        text: msg.text,
+        // ...
+      });
+    });
+  }
+}
+```
+
+## Outbound Message Types
+
+Handle different payload types:
+
+```typescript
+outbound: {
+  send: async ({ account, to, payload }) => {
+    if (payload.kind === "text") {
+      await sendText(account, to, payload.text);
+      return { ok: true };
+    }
+    
+    if (payload.kind === "image") {
+      await sendImage(account, to, payload.imagePath, payload.caption);
+      return { ok: true };
+    }
+    
+    if (payload.kind === "file") {
+      await sendFile(account, to, payload.filePath, payload.caption);
+      return { ok: true };
+    }
+    
+    return { ok: false, error: `Unsupported payload kind: ${payload.kind}` };
+  }
+}
+```
+
+## Configuration Schema
+
+Define configuration with Zod:
+
+```typescript
+import { z } from "zod";
+import { buildChannelConfigSchema } from "openclaw/plugin-sdk";
+
+const MyChannelConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  apiKey: z.string(),
+  serverUrl: z.string().url(),
+  accounts: z.array(
+    z.object({
+      id: z.string(),
+      apiKey: z.string()
+    })
+  ).optional()
+});
+
+const configSchema = buildChannelConfigSchema(MyChannelConfigSchema, {
+  apiKey: { sensitive: true, label: "API Key" },
+  serverUrl: { label: "Server URL", placeholder: "https://api.example.com" }
+});
+```
+
+## Runtime Services
+
+Channel plugins can use runtime services:
+
+```typescript
+import { setMyChannelRuntime } from "./runtime.js";
+
+const plugin = {
+  register(api: OpenClawPluginApi) {
+    // Store runtime for use in channel adapter
+    setMyChannelRuntime(api.runtime);
+    
+    api.registerChannel({ plugin: myChannelPlugin });
+  }
+};
+```
+
+Then use in channel code:
+
+```typescript
+import { getMyChannelRuntime } from "./runtime.js";
+
+const runtime = getMyChannelRuntime();
+const media = await runtime.media.loadWebMedia(url);
+const logger = runtime.logging.getChildLogger({ channel: "my-channel" });
+```
+
+## Best Practices
+
+### 1. Error Handling
+
+Handle connection errors gracefully:
+
+```typescript
+gateway: {
+  start: async ({ account, logger }) => {
+    try {
+      const client = await connect(account);
+      return client;
+    } catch (err) {
+      logger.error(`Connection failed: ${err}`);
+      throw err;
+    }
+  }
+}
+```
+
+### 2. Reconnection Logic
+
+Implement automatic reconnection:
+
+```typescript
+gateway: {
+  start: async ({ account, logger }) => {
+    const client = new Client();
+    
+    client.on("disconnect", async () => {
+      logger.warn("Disconnected, reconnecting...");
+      await client.reconnect();
+    });
+    
+    await client.connect();
+    return client;
+  }
+}
+```
+
+### 3. Rate Limiting
+
+Respect platform rate limits:
+
+```typescript
+import { sleep } from "openclaw/plugin-sdk";
+
+outbound: {
+  send: async ({ account, to, payload }) => {
+    await rateLimiter.acquire();
+    await sendMessage(to, payload.text);
+    await sleep(100); // Throttle
+    return { ok: true };
+  }
+}
+```
+
+### 4. Status Checks
+
+Provide detailed status information:
+
+```typescript
+status: {
+  describe: async ({ account }) => {
+    const issues = [];
+    
+    if (!account.apiKey) {
+      issues.push({ severity: "error", message: "Missing API key" });
+    }
+    
+    const connected = await checkConnection(account);
+    if (!connected) {
+      issues.push({ severity: "error", message: "Not connected" });
+    }
+    
+    return {
+      summary: issues.length === 0 ? "connected" : "error",
+      issues
+    };
+  }
+}
+```
+
+## Example Channels
+
+Explore these built-in channel plugins:
+
+- **Matrix** - `extensions/matrix` - Matrix protocol integration
+- **Microsoft Teams** - `extensions/msteams` - Bot Framework integration
+- **IRC** - `extensions/irc` - IRC protocol
+- **Mattermost** - `extensions/mattermost` - Mattermost API
+- **Nextcloud Talk** - `extensions/nextcloud-talk` - Nextcloud integration
+
+See the [extensions directory](https://github.com/openclaw/openclaw/tree/main/extensions) for complete implementations.
+
+## Next Steps
+
+- [Examples](/plugins/examples) - Complete channel plugin examples
+- [Publishing](/plugins/publishing) - Publish your plugin to npm
+- [Built-in Extensions](/plugins/built-in-extensions) - Explore existing plugins
