@@ -11,15 +11,15 @@ OpenClaw is configured through a JSON file at `~/.openclaw/openclaw.json`. This 
 
 By default, OpenClaw looks for configuration in:
 
-```
+```text
 ~/.openclaw/openclaw.json
-```
+```text
 
 You can specify a custom location:
 
 ```bash
 oclaw gateway --config /path/to/config.json
-```
+```text
 
 <Info>
 The config file uses JSON5 format, which supports comments and trailing commas.
@@ -35,7 +35,7 @@ The simplest configuration just specifies the AI model:
     "model": "anthropic/claude-opus-4-6"
   }
 }
-```
+```text
 
 This uses all default values:
 - Gateway on port 18789
@@ -59,7 +59,7 @@ The configuration file has these top-level sections:
   "hooks": {},        // Webhook configuration
   "skills": {}        // Skills registry settings
 }
-```
+```text
 
 ## Agent Configuration
 
@@ -71,7 +71,7 @@ The configuration file has these top-level sections:
     "model": "anthropic/claude-opus-4-6"
   }
 }
-```
+```text
 
 ### Model with Fallbacks
 
@@ -87,7 +87,7 @@ The configuration file has these top-level sections:
     }
   }
 }
-```
+```text
 
 ### Agent Defaults
 
@@ -105,7 +105,7 @@ The configuration file has these top-level sections:
     }
   }
 }
-```
+```text
 
 <Note>
 The `sandbox.mode: "non-main"` setting runs group chat sessions in Docker containers for security, while direct DMs use host tools.
@@ -122,7 +122,7 @@ The `sandbox.mode: "non-main"` setting runs group chat sessions in Docker contai
     "bind": "loopback"
   }
 }
-```
+```text
 
 Binding modes:
 - `loopback`: 127.0.0.1 (local only, most secure)
@@ -143,7 +143,7 @@ Binding modes:
     }
   }
 }
-```
+```text
 
 #### Password Authentication
 
@@ -156,7 +156,7 @@ Binding modes:
     }
   }
 }
-```
+```text
 
 <Warning>
 Always use authentication when binding to anything other than localhost.
@@ -175,7 +175,7 @@ Always use authentication when binding to anything other than localhost.
     }
   }
 }
-```
+```text
 
 ### Control UI
 
@@ -189,7 +189,7 @@ Always use authentication when binding to anything other than localhost.
     }
   }
 }
-```
+```text
 
 ## Channel Configuration
 
@@ -205,7 +205,7 @@ Always use authentication when binding to anything other than localhost.
     }
   }
 }
-```
+```text
 
 <Info>
 WhatsApp requires pairing via QR code. Run `openclaw channels login` to pair your device.
@@ -227,7 +227,7 @@ WhatsApp requires pairing via QR code. Run `openclaw channels login` to pair you
     }
   }
 }
-```
+```text
 
 Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram.
 
@@ -248,7 +248,7 @@ Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram.
     }
   }
 }
-```
+```text
 
 ### Slack
 
@@ -262,7 +262,7 @@ Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram.
     }
   }
 }
-```
+```text
 
 ### Signal
 
@@ -275,7 +275,7 @@ Get a bot token from [@BotFather](https://t.me/BotFather) on Telegram.
     }
   }
 }
-```
+```text
 
 <Note>
 Signal requires `signal-cli` to be installed and registered.
@@ -293,7 +293,7 @@ Signal requires `signal-cli` to be installed and registered.
     }
   }
 }
-```
+```text
 
 <Warning>
 Legacy iMessage integration requires macOS and the Messages app to be signed in. Consider using BlueBubbles for a more reliable integration.
@@ -348,7 +348,7 @@ Route different channels or groups to specialized agents:
     ]
   }
 }
-```
+```text
 
 ## Security Settings
 
@@ -365,13 +365,13 @@ Route different channels or groups to specialized agents:
     }
   }
 }
-```
+```text
 
 Unknown senders receive a pairing code. Approve with:
 
 ```bash
 oclaw pairing approve <channel> <code>
-```
+```text
 
 ### Open DM Policy
 
@@ -384,7 +384,7 @@ oclaw pairing approve <channel> <code>
     }
   }
 }
-```
+```text
 
 <Warning>
 Only use `dmPolicy: "open"` with `allowFrom: ["*"]` if you understand the security implications. Anyone can message your bot.
@@ -404,7 +404,7 @@ Only use `dmPolicy: "open"` with `allowFrom: ["*"]` if you understand the securi
     }
   }
 }
-```
+```text
 
 This runs group chat sessions in isolated Docker containers.
 
@@ -422,7 +422,7 @@ This runs group chat sessions in isolated Docker containers.
     }
   }
 }
-```
+```text
 
 ## Cron Jobs
 
@@ -442,7 +442,7 @@ This runs group chat sessions in isolated Docker containers.
     ]
   }
 }
-```
+```text
 
 Schedule format: [cron expression](https://crontab.guru/)
 
@@ -464,7 +464,7 @@ export DISCORD_BOT_TOKEN=your-discord-token
 # Slack
 export SLACK_BOT_TOKEN=xoxb-your-bot-token
 export SLACK_APP_TOKEN=xapp-your-app-token
-```
+```text
 
 <Tip>
 Environment variables are useful for secrets in CI/CD pipelines and Docker deployments.
@@ -483,7 +483,7 @@ oclaw config show
 
 # Edit config
 oclaw config edit
-```
+```text
 
 ## Configuration Management
 
@@ -492,20 +492,20 @@ oclaw config edit
 ```bash
 oclaw config get gateway.port
 # Output: 18789
-```
+```text
 
 ### Set a Value
 
 ```bash
 oclaw config set gateway.port 18790
 oclaw config set agent.model "anthropic/claude-sonnet-4"
-```
+```text
 
 ### Unset a Value
 
 ```bash
 oclaw config unset channels.telegram.botToken
-```
+```text
 
 ## Example Configurations
 
@@ -523,7 +523,7 @@ oclaw config unset channels.telegram.botToken
     }
   }
 }
-```
+```text
 
 ### Multi-Channel with Security
 
@@ -567,7 +567,7 @@ oclaw config unset channels.telegram.botToken
     }
   }
 }
-```
+```text
 
 ### Remote VPS Deployment
 
@@ -600,7 +600,7 @@ oclaw config unset channels.telegram.botToken
     }
   }
 }
-```
+```text
 
 ## Next Steps
 
