@@ -9,7 +9,7 @@
     "dark": "#FF5A36"
   }, 
   "logo": "/openclaw-logo-text-dark.png",
-  "favicon": "/openclaw-favicon.ico"
+  "favicon": "/openclaw-favicon.ico",
   "navbar": {
     "primary": {
       "type": "github",
