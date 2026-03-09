@@ -2,13 +2,16 @@
   "$schema": "https://mintlify.com/docs.json",
   "name": "OpenClaw",
   "description": "Self-hosted AI assistant gateway for WhatsApp, Telegram, Discord, iMessage, and more messaging platforms",
-  "theme": "mint",
+  "theme": "aspen",
   "colors": {
     "primary": "#FF5A36",
     "light": "#FF8A6B",
     "dark": "#FF5A36"
   }, 
-  "logo": "/openclaw-logo-text-dark.png",
+  "logo": {
+    "light": "/openclaw-logo-text-dark.png",
+    "dark": "/images/openclaw-logo-text-white.png"
+  },
   "favicon": "/openclaw-favicon.ico",
   "navbar": {
     "primary": {
